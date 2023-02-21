@@ -1,0 +1,12 @@
+{
+    "startFrequency": 433.92,
+    "apMode": true,
+    "apSSID": "FlipperChat",
+    "apPassword": "changeme",
+    "wifi": [
+        {
+          "ssid": "",
+          "password": ""
+        }
+    ]
+}
