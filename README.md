@@ -9,10 +9,10 @@ In order to build this you will need:
  * ESP32 - https://www.amazon.com/gp/product/B09GK74F7N/
  * CC1101 - https://www.amazon.com/gp/product/B01DS1WUEQ/
  * Computer with Arduino 1.8.18
-	 * ESP32 library support (https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json)
-	 * SmartRC-CC1101-Driver-Lib (https://github.com/LSatan/SmartRC-CC1101-Driver-Lib)
-	 * Ability to upload FatFS image (https://github.com/lorol/arduino-esp32fs-plugin)
-	 * ArduinoJson 6.19.3 (https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
+     * ESP32 library support (https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json)
+     * SmartRC-CC1101-Driver-Lib (https://github.com/LSatan/SmartRC-CC1101-Driver-Lib)
+     * Ability to upload FatFS image (https://github.com/lorol/arduino-esp32fs-plugin)
+     * ArduinoJson 6.19.3 (https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
 
 
 ### Building your own bridge
@@ -33,9 +33,9 @@ Once you've downloaded the source and properly setup your IDE for flashing, edit
 ```json
 {
   "startFrequency": 433.92,
-	"apMode": true,
-	"apSSID": "FlipperChat",
-	"apPassword": "changeme",
+    "apMode": true,
+    "apSSID": "FlipperChat",
+    "apPassword": "changeme",
     "wifi": [
         {
           "ssid": "Your network name",
@@ -55,6 +55,6 @@ Navigate a web browser to the ESP32's ip (output on the serial console) and you 
 
 Technically you could build two bridges and they would be able to communicate with each other as well.
 
-The catch is there is the CC1101 can only tune into one frequency, so everyone must be on the same frequency and if someone changes the frequency it effects all users on that bridge. You can see the current tuned frequency in the upper right hand corner.
+The catch is the CC1101 can only tune into one frequency, so everyone must be on the same frequency and if someone changes the frequency it effects all users on that bridge. You can see the current tuned frequency in the upper left hand corner.
 
 At any point while in the chat screen a connected user may type "/freq 433.92" to change the frequency, the new frequency must be expressed in Mhz.
