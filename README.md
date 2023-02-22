@@ -69,7 +69,7 @@ Connect to ws://[deviceip]:81/
 
 The server will immediately send a message like..
 ```json
-{clientIp: "192.168.34.131", mhz: 315, users: [{u: "Lyp1n1", s: "radio", r: -36}]}
+{"clientIp": "192.168.34.131", "mhz": 315, "users": [{"u": "Lyp1n1", "s": "radio", "r": -36}]}
 ```
 
   * clientIp will be your ip as the device sees it
