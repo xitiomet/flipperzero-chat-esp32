@@ -458,6 +458,10 @@ void loadSettings()
         }
       }
       wl_status = wifiMulti.run();
+      if (wl_status == WL_CONNECTED)
+      {
+        tryMDNS();
+      }
     }
   }
 }
