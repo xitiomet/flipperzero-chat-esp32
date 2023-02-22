@@ -128,20 +128,11 @@ void setup()
   loadSettings();
   ELECHOUSE_cc1101.Init();
   flipperChatPreset();
-
   webSocketServer.begin();
   webSocketServer.onEvent(webSocketServerEvent);
   httpServer.on("/", handleRoot);
   httpServer.onNotFound(handleNotFound);
   httpServer.begin();
-
-  wl_status = wifiMulti.run();
-  if (wl_status == WL_CONNECTED)
-  {
-    Serial.print("Network IP: ");
-    Serial.println(WiFi.localIP());
-    tryMDNS();
-  }
 }
 
 byte buffer[255] = {0};
@@ -211,7 +202,7 @@ void checkRadio()
         serializeJson(jsonBuffer, out);
         webSocketServer.broadcastTXT(out);
       }
-    } else {
+    }/* else {
       String out;
       StaticJsonDocument<2048> jsonBuffer;
       JsonArray raw_array = jsonBuffer.createNestedArray("raw");
@@ -225,7 +216,7 @@ void checkRadio()
       jsonBuffer["source"] = "radio";
       serializeJson(jsonBuffer, out);
       webSocketServer.broadcastTXT(out);      
-    }
+    }*/
   }
 }
 
