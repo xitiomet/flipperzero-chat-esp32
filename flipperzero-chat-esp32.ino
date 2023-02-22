@@ -31,6 +31,7 @@
 #include <ArduinoJson.h>
 #include <FFat.h>
 
+#define MAX_MEMBERS 40
 #define SS_PIN    5
 float frequency = 433.92;
 
@@ -38,6 +39,11 @@ WiFiMulti wifiMulti;
 WebSocketsServer webSocketServer(81);
 WebServer httpServer(80);
 IPAddress apIP(10, 10, 10, 1);
+
+String members[MAX_MEMBERS];
+String member_sources[MAX_MEMBERS];
+int member_nums[MAX_MEMBERS];
+int member_rssi[MAX_MEMBERS];
 
 uint8_t wl_status;
 boolean mdns_started = false;
@@ -69,6 +75,7 @@ void flipperChatPreset()
 void processJSONPayload(int num, uint8_t * payload)
 {
   IPAddress ip = webSocketServer.remoteIP(num);
+  String source = ip.toString();
   char* data = (char *) payload;
   DynamicJsonDocument root(2048);
   DeserializationError error = deserializeJson(root, data);
@@ -91,23 +98,15 @@ void processJSONPayload(int num, uint8_t * payload)
       } else if (root.containsKey("event")) {
         if (event.equals("join"))
         {
-          String xmitData = "\x1B[0;33m" + username + " joined chat.\x1B[0m\r\n";
-          int data_len = xmitData.length() + 1;
-          char data_array[data_len];
-          xmitData.toCharArray(data_array, data_len);
-          ELECHOUSE_cc1101.SendData(data_array, data_len);
+          registerUser(num, username, source, WiFi.RSSI());
         } else if (event.equals("part")) {
-          String xmitData = "\x1B[0;33m" + username + " left chat.\x1B[0m\r\n";
-          int data_len = xmitData.length() + 1;
-          char data_array[data_len];
-          xmitData.toCharArray(data_array, data_len);
-          ELECHOUSE_cc1101.SendData(data_array, data_len);
+          deleteUser(username);
         } if (event.equals("frequency")) {
           frequency = root["mhz"].as<float>();
           ELECHOUSE_cc1101.setMHZ(frequency);
         }
       }
-      root["source"] = ip.toString();
+      root["source"] = source;
       root["num"] = num;
       String out;
       serializeJson(root, out);
@@ -120,8 +119,112 @@ void processJSONPayload(int num, uint8_t * payload)
   }
 }
 
+int registerUser(int wsNum, String &username, String &source, int rssi)
+{
+  for(int i = 0; i < MAX_MEMBERS; i++)
+  {
+    if (members[i] == "" || members[i].equals(username))
+    {
+      members[i] = username;
+      member_nums[i] = wsNum;
+      member_sources[i] = source;
+      member_rssi[i] = rssi;
+      String out;
+      StaticJsonDocument<2048> jsonBuffer;
+      jsonBuffer["username"] = members[i];
+      jsonBuffer["event"] = "join";
+      jsonBuffer["rssi"] = rssi;
+      if (source.equals("radio"))
+      {
+        jsonBuffer["source"] = "radio";
+      } else {
+        jsonBuffer["source"] = source;
+      }
+      serializeJson(jsonBuffer, out);
+      webSocketServer.broadcastTXT(out);
+      if (!source.equals("radio"))
+      {
+        String xmitData = "\x1B[0;33m" + username + " joined chat.\x1B[0m\r\n";
+        int data_len = xmitData.length() + 1;
+        char data_array[data_len];
+        xmitData.toCharArray(data_array, data_len);
+        ELECHOUSE_cc1101.SendData(data_array, data_len);
+      }
+      return i;
+    }
+  }
+}
+
+void deleteUsersForNum(int wsNum)
+{
+  if (wsNum >= 0)
+  {
+    for(int i = 0; i < MAX_MEMBERS; i++)
+    {
+      if (member_nums[i] == wsNum)
+      {
+        deleteUser(i);
+        return;
+      }
+    }
+  }
+}
+
+int findUser(String &username)
+{
+  for(int i = 0; i < MAX_MEMBERS; i++)
+  {
+    if (members[i].equals(username))
+    {
+      return i;
+    }
+  }
+  return 0;
+}
+
+int deleteUser(String &username)
+{
+  int devNum = findUser(username);
+  if (devNum > 0)
+  {
+    deleteUser(devNum);
+  }
+  return devNum;
+}
+
+void deleteUser(int idx)
+{
+  String out;
+  StaticJsonDocument<2048> jsonBuffer;
+  jsonBuffer["username"] = members[idx];
+  jsonBuffer["event"] = "part";
+  jsonBuffer["rssi"] = member_rssi[idx];
+  jsonBuffer["source"] = member_sources[idx];
+  serializeJson(jsonBuffer, out);
+  webSocketServer.broadcastTXT(out);
+  if (!member_sources[idx].equals("radio"))
+  {
+    String xmitData = "\x1B[0;33m" + members[idx] + " left chat.\x1B[0m\r\n";
+    int data_len = xmitData.length() + 1;
+    char data_array[data_len];
+    xmitData.toCharArray(data_array, data_len);
+    ELECHOUSE_cc1101.SendData(data_array, data_len);
+  }
+  members[idx] = "";
+  member_nums[idx] = 0;
+  member_sources[idx] = "";
+  member_rssi[idx] = 0;
+}
+
 void setup()
 {
+  for(int i = 0; i < MAX_MEMBERS; i++)
+  {
+    members[i] = "";
+    member_nums[i] = 0;
+    member_sources[i] = "";
+    member_rssi[i] = 0;
+  }
   Serial.begin(115200);
   Serial.println("INIT");
   FFat.begin();
@@ -172,25 +275,14 @@ void checkRadio()
       }
       String username = String(nick);
       String text = String(msg);
+      String source = "radio";
       if (username.indexOf(" joined chat.") >= 0)
       {
-        String out;
-        StaticJsonDocument<2048> jsonBuffer;
-        jsonBuffer["username"] = username.substring(0, username.length() - 13);
-        jsonBuffer["event"] = "join";
-        jsonBuffer["rssi"] = rssi;
-        jsonBuffer["source"] = "radio";
-        serializeJson(jsonBuffer, out);
-        webSocketServer.broadcastTXT(out);
+        String realUsername = String(username.substring(0, username.length() - 13));
+        registerUser(0, realUsername, source, rssi);
       } else if (username.indexOf(" left chat.") >= 0 || text.indexOf(" left chat.") >= 0) {
-        String out; 
-        StaticJsonDocument<2048> jsonBuffer;
-        jsonBuffer["username"] = username.substring(0, username.length() - 11);
-        jsonBuffer["event"] = "part";
-        jsonBuffer["rssi"] = rssi;
-        jsonBuffer["source"] = "radio";
-        serializeJson(jsonBuffer, out);
-        webSocketServer.broadcastTXT(out);
+        String realUsername = String(username.substring(0, username.length() - 11));
+        deleteUser(realUsername);
       } else {
         String out;
         StaticJsonDocument<2048> jsonBuffer;
@@ -198,7 +290,7 @@ void checkRadio()
         jsonBuffer["text"] = text;
         jsonBuffer["event"] = "chat";
         jsonBuffer["rssi"] = rssi;
-        jsonBuffer["source"] = "radio";
+        jsonBuffer["source"] = source;
         serializeJson(jsonBuffer, out);
         webSocketServer.broadcastTXT(out);
       }
@@ -254,21 +346,27 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
   switch (type)
   {
     case WStype_DISCONNECTED: {
-        StaticJsonDocument<128> jsonBuffer;
-        jsonBuffer["event"] = "disconnect";
-        jsonBuffer["num"] = num;
-        String out;
-        serializeJson(jsonBuffer, out);
-        webSocketServer.broadcastTXT(out);
+        deleteUsersForNum((int)num);
       }
       break;
     case WStype_CONNECTED: {
         IPAddress ip = webSocketServer.remoteIP(num);
         Serial.print("Websocket Connection: ");
         Serial.println(ip);
-        StaticJsonDocument<128> jsonBuffer;
+        StaticJsonDocument<2048> jsonBuffer;
         jsonBuffer["clientIp"] = ip.toString();
         jsonBuffer["mhz"] = frequency;
+        JsonArray usersJson = jsonBuffer.createNestedArray("users");
+        for(int i = 0; i < MAX_MEMBERS; i++)
+        {
+          if (members[i] != "")
+          {
+            JsonObject d = usersJson.createNestedObject();
+            d["u"] = members[i];
+            d["s"] = member_sources[i];
+            d["r"] = member_rssi[i];
+          }
+        }
         String out;
         serializeJson(jsonBuffer, out);
         webSocketServer.sendTXT(num, out);

@@ -28,7 +28,9 @@ In order to build this you will need:
 
 Please note: The GDO0 and GDO2 pins are left unconnected.
 
-Once you've downloaded the source and properly setup your IDE for flashing, edit the settings.json file in the data directory. This will be loaded at startup.
+Once you've downloaded the source and properly setup your IDE for flashing:
+  1. copy "base-settings.json" to "data/settings.json"
+  2. edit the settings.json file in the data directory. This will be loaded at startup.
 
 ```json
 {
@@ -58,3 +60,43 @@ Technically you could build two bridges and they would be able to communicate wi
 The catch is the CC1101 can only tune into one frequency, so everyone must be on the same frequency and if someone changes the frequency it effects all users on that bridge. You can see the current tuned frequency in the upper left hand corner.
 
 At any point while in the chat screen a connected user may type "/freq 433.92" to change the frequency, the new frequency must be expressed in Mhz.
+
+### Websocket protocol
+
+If you would like to make your own client to interface with this device the protocol is pretty simple. port 81 is a websocket server all messages are single line json objects.
+
+Connect to ws://[deviceip]:81/
+
+The server will immediately send a message like..
+```json
+{clientIp: "192.168.34.131", mhz: 315, users: [{u: "Lyp1n1", s: "radio", r: -36}]}
+```
+
+  * clientIp will be your ip as the device sees it
+  * mhz is the current radio frequency
+  * users is an array of json objects with three fields, u = username, s = source (radio/ip), r = rssi
+
+To register a user send
+```json
+{"event":"join", "username":"Hacker5091"}
+```
+
+there should be a response like:
+```json
+{"event":"join", "username": "Hacker5091", "rssi": -63, "source": "192.168.0.131"}
+```
+
+To send a chat messge send
+```json
+{"event":"chat", "username": "Hacker5091", "text": "This is a chat message"}
+```
+
+To unregister a user
+```json
+{"event":"part", "username":"Hacker5091"}
+```
+
+To change the frequency
+```json
+{"event":"frequency", "mhz": 315, "username": "Hacker5091"}
+```

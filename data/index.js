@@ -6,7 +6,6 @@ var keepAliveInterval;
 
 var lastTyped = 0;
 var typing = false;
-var usernames = new Map();
 
 function sendEvent(wsEvent)
 {
@@ -23,34 +22,37 @@ function sendEvent(wsEvent)
 
 function updateUserNick(username, details, picture = "flipper.png")
 {
-    var id = "user_" + username;
-    if (document.getElementById(id) == undefined)
+    if (document.getElementById("nicknameField").value != username)
     {
-        var chat_list_div = document.createElement("div");
-        chat_list_div.id = id;
-        chat_list_div.className = "chat_list"; // also active_chat
-        chat_list_div.innerHTML = "<div class=\"chat_people\"><div class=\"chat_img\">" +
-                                  "<img id=\"avatar_" + id + "\" src=\"" + picture + "\"> </div>" +
-                                    "<div class=\"chat_ib\" style=\"padding-top: 0px;\">" +
-                                    "<div style=\"font-size: 18px;\" id=\"nick_" + id + "\">" + username + "</div>" +
-                                    "<span style=\"font-size: 10px;\" id=\"details_" + id + "\">" + details + "</span>" +
-                                    "</div></div>";
-        document.getElementById('user_list').appendChild(chat_list_div);
-    } else {
-        var trow = document.getElementById("nick_" + id);
-        if (trow != undefined)
+        var id = "user_" + username;
+        if (document.getElementById(id) == undefined)
         {
-            trow.innerHTML = username;
-        }
-        var trow2 = document.getElementById("details_" + id);
-        if (trow2 != undefined)
-        {
-            trow2.innerHTML = details;
-        }
-        var avatar = document.getElementById("avatar_" + id);
-        if (avatar != undefined)
-        {
-            avatar.src = picture;
+            var chat_list_div = document.createElement("div");
+            chat_list_div.id = id;
+            chat_list_div.className = "chat_list"; // also active_chat
+            chat_list_div.innerHTML = "<div class=\"chat_people\"><div class=\"chat_img\">" +
+                                      "<img id=\"avatar_" + id + "\" src=\"" + picture + "\"> </div>" +
+                                        "<div class=\"chat_ib\" style=\"padding-top: 0px;\">" +
+                                        "<div style=\"font-size: 18px;\" id=\"nick_" + id + "\">" + username + "</div>" +
+                                        "<span style=\"font-size: 10px;\" id=\"details_" + id + "\">" + details + "</span>" +
+                                        "</div></div>";
+            document.getElementById('user_list').appendChild(chat_list_div);
+        } else {
+            var trow = document.getElementById("nick_" + id);
+            if (trow != undefined)
+            {
+                trow.innerHTML = username;
+            }
+            var trow2 = document.getElementById("details_" + id);
+            if (trow2 != undefined)
+            {
+                trow2.innerHTML = details;
+            }
+            var avatar = document.getElementById("avatar_" + id);
+            if (avatar != undefined)
+            {
+                avatar.src = picture;
+            }
         }
     }
 }
@@ -129,8 +131,20 @@ function setupWebsocket()
             if (jsonObject.hasOwnProperty('mhz'))
             {
                 document.getElementById('freq').innerHTML = jsonObject.mhz + " Mhz";
-                if (!jsonObject.hasOwnProperty('clientIp'))
-                    logIt("Frequency Changed to " + jsonObject.mhz + " Mhz");
+            }
+            if (jsonObject.hasOwnProperty('users'))
+            {
+                var usersList = jsonObject.users;
+                for (var i = 0; i < usersList.length; i++) 
+                {
+                    var user = usersList[i];
+                    if (user.s == 'radio')
+                    {
+                        updateUserNick(user.u, "RSSI " + user.r, "flipper.png");
+                    } else {
+                        updateUserNick(user.u, user.s, "spy.png");
+                    }
+                }
             }
             if (jsonObject.hasOwnProperty('event'))
             {
@@ -159,20 +173,10 @@ function setupWebsocket()
                             updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "flipper.png");
                         } else {
                             updateUserNick(jsonObject.username, jsonObject.source, "spy.png");
-                            if (jsonObject.hasOwnProperty('num'))
-                            {
-                                usernames.set(jsonObject.num, jsonObject.username);
-                            }
                         }
                     }
                 } else if (event == 'part') {
                     removeUserEntry(jsonObject.username);
-                } else if (event == 'disconnect') {
-                    if (usernames.has(jsonObject.num))
-                    {
-                        removeUserEntry(usernames.get(jsonObject.num));
-                        usernames.delete(jsonObject.num);
-                    }
                 } else if (event == 'frequency') {
                     logIt("Frequency changed to " + jsonObject.mhz + " Mhz");
                 }
@@ -191,7 +195,11 @@ function setupWebsocket()
 }
 
 window.onload = function() {
-    var nickname = prompt('enter nickname', 'Hacker');
+    var a = Math.floor(100000 + Math.random() * 900000);   
+    a = String(a);
+    a = a.substring(0,4);
+    
+    var nickname = prompt('enter nickname', 'Hacker' + a);
     document.getElementById("nicknameField").value = nickname;
     setupWebsocket();
     $("#messageBox").keyup(function(event) {
