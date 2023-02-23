@@ -30,6 +30,7 @@
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <FFat.h>
+#include "./DNSServer.h"
 
 #define MAX_MEMBERS 40
 #define SS_PIN    5
@@ -39,6 +40,7 @@ WiFiMulti wifiMulti;
 WebSocketsServer webSocketServer(81);
 WebServer httpServer(80);
 IPAddress apIP(10, 10, 10, 1);
+DNSServer dnsServer;
 
 String members[MAX_MEMBERS];
 String member_sources[MAX_MEMBERS];
@@ -48,6 +50,7 @@ int member_rssi[MAX_MEMBERS];
 uint8_t wl_status;
 boolean mdns_started = false;
 boolean apMode = true;
+boolean captiveDNS = false;
 
 //furi_hal_subghz_preset_gfsk_9_99kb_async_regs
 void flipperChatPreset()
@@ -236,6 +239,7 @@ void setup()
   httpServer.on("/", handleRoot);
   httpServer.onNotFound(handleNotFound);
   httpServer.begin();
+  Serial.println("INIT_COMPLETE");
 }
 
 byte buffer[255] = {0};
@@ -285,7 +289,7 @@ void checkRadio()
         deleteUser(realUsername);
       } else {
         String out;
-        StaticJsonDocument<2048> jsonBuffer;
+        StaticJsonDocument<4096> jsonBuffer;
         jsonBuffer["username"] = username;
         jsonBuffer["text"] = text;
         jsonBuffer["event"] = "chat";
@@ -322,6 +326,7 @@ void loop()
 {
   if (!apMode)
   {
+    // client mode with mDNS
     uint8_t last_wl_status = wl_status;
     wl_status = wifiMulti.run(); 
     if (wl_status == WL_CONNECTED)
@@ -335,7 +340,12 @@ void loop()
       loopNetwork();
     }
   } else {
+    // apMode with captive DNS
     loopNetwork();
+    if (captiveDNS)
+    {
+      dnsServer.processNextRequest();
+    }
   }
   checkRadio();
 }
@@ -414,26 +424,48 @@ void loadSettings()
     {
       frequency = settings["startFrequency"].as<float>();
     }
-    if (settings.containsKey("apMode"))
+    if (settings.containsKey("apMode") && settings.containsKey("apSSID"))
     {
       apMode = settings["apMode"].as<bool>();
     }
+    if (settings.containsKey("captiveDNS"))
+    {
+      captiveDNS = settings["captiveDNS"].as<bool>();
+    }
     if (apMode)
     {
+      Serial.println("Access Point Mode!");
       WiFi.mode(WIFI_AP);
       WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+      String ssid = settings["apSSID"].as<String>();
       if (settings.containsKey("apPassword"))
       {
-        String ssid = settings["apSSID"].as<String>();
         String password = settings["apPassword"].as<String>();
-        WiFi.softAP(ssid.c_str(), password.c_str());
+        if (password.equals("null"))
+        {
+          Serial.println("AP has no password");
+          WiFi.softAP(ssid.c_str(), NULL);
+        } else {
+          Serial.print("AP password = ");
+          Serial.println(password);
+          WiFi.softAP(ssid.c_str(), password.c_str());
+        }
       } else {
+        Serial.println("AP has no password");
         String ssid = settings["apSSID"].as<String>();
         WiFi.softAP(ssid.c_str(), NULL);
       }
       wl_status = WL_CONNECTED;
       tryMDNS();
+      if (captiveDNS)
+      {
+        Serial.println("Captive DNS Enabled");
+        dnsServer.start(53, "*", apIP);
+      } else {
+        Serial.println("Captive DNS Disabled");
+      }
     } else {
+      Serial.println("WiFi Client Mode!");
       WiFi.mode(WIFI_STA);
     }
     if (settings.containsKey("wifi") && !apMode)
@@ -460,6 +492,8 @@ void loadSettings()
       wl_status = wifiMulti.run();
       if (wl_status == WL_CONNECTED)
       {
+        Serial.print("Network IP: ");
+        Serial.println(WiFi.localIP());
         tryMDNS();
       }
     }

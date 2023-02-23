@@ -1,6 +1,7 @@
 {
     "startFrequency": 433.92,
     "apMode": true,
+    "captiveDNS": false,
     "apSSID": "FlipperChat",
     "apPassword": "changeme",
     "wifi": [

@@ -36,6 +36,7 @@ Once you've downloaded the source and properly setup your IDE for flashing:
 {
   "startFrequency": 433.92,
     "apMode": true,
+    "captiveDNS": false,
     "apSSID": "FlipperChat",
     "apPassword": "changeme",
     "wifi": [
@@ -48,6 +49,8 @@ Once you've downloaded the source and properly setup your IDE for flashing:
 
 ```
 if "apMode" is set to true the ESP32 will create a network with the settings labeled "apSSID" and "apPassword". Otherwise please add the wifi networks that should be searched for to the json array named "wifi"
+
+The "captiveDNS" setting will redirect any DNS queries to the device's apMode IP (10.10.10.1)
 
 Now you are all set to flash the sketch and upload the FatFS image.
 
