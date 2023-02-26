@@ -31,6 +31,21 @@
 #include <ArduinoJson.h>
 #include <FFat.h>
 #include "./DNSServer.h"
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define OLED_RESET -1
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define SCREEN_ADDRESS 0x3c ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+#define PIX_ROW_1 0
+#define PIX_ROW_1p5 8
+#define PIX_ROW_2 24
+#define PIX_ROW_3 40
+#define PIX_ROW_4 56
 
 #define MAX_MEMBERS 40
 #define SS_PIN    5
@@ -51,6 +66,13 @@ uint8_t wl_status;
 boolean mdns_started = false;
 boolean apMode = true;
 boolean captiveDNS = false;
+boolean displayInit = false;
+
+long lastSecondAt = 0;
+String line1 = "";
+String line2 = "";
+String line3 = "";
+String line4 = "";
 
 //furi_hal_subghz_preset_gfsk_9_99kb_async_regs
 void flipperChatPreset()
@@ -182,17 +204,17 @@ int findUser(String &username)
       return i;
     }
   }
-  return 0;
+  return -1;
 }
 
 int deleteUser(String &username)
 {
-  int devNum = findUser(username);
-  if (devNum > 0)
+  int idx = findUser(username);
+  if (idx >= 0)
   {
-    deleteUser(devNum);
+    deleteUser(idx);
   }
-  return devNum;
+  return idx;
 }
 
 void deleteUser(int idx)
@@ -239,6 +261,21 @@ void setup()
   httpServer.on("/", handleRoot);
   httpServer.onNotFound(handleNotFound);
   httpServer.begin();
+
+  if (display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
+  {
+    Serial.println("Display INIT OK");
+    display.display();
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.display();
+    displayInit = true;
+  } else {
+    Serial.println("Display INIT FAIL");
+    displayInit = false;
+  }
+  
   Serial.println("INIT_COMPLETE");
 }
 
@@ -288,6 +325,10 @@ void checkRadio()
         String realUsername = String(username.substring(0, username.length() - 11));
         deleteUser(realUsername);
       } else {
+        if (findUser(username) == -1)
+        {
+          registerUser(0, username, source, rssi);
+        }
         String out;
         StaticJsonDocument<4096> jsonBuffer;
         jsonBuffer["username"] = username;
@@ -316,14 +357,56 @@ void checkRadio()
   }
 }
 
+void redraw()
+{
+  if (displayInit)
+  {
+    display.clearDisplay();
+    display.setCursor(0,PIX_ROW_1);
+    display.setTextSize(2);
+    display.print(line1);
+    display.setTextSize(1);
+    display.setCursor(0,PIX_ROW_2);
+    display.print(line2);
+    display.setCursor(0,PIX_ROW_3);
+    display.print(line3);
+    display.setCursor(0,PIX_ROW_4);
+    display.print(line4);
+    display.display();
+  }
+}
+
 void loopNetwork()
 {
   webSocketServer.loop();
   httpServer.handleClient();
 }
 
+void everySecond()
+{
+  int flipperCount = 0;
+  int networkCount = 0;
+  for(int i = 0; i < MAX_MEMBERS; i++)
+  {
+    if (members[i] != "")
+    {
+      if (member_sources[i].equals("radio"))
+      {
+        flipperCount++;
+      } else {
+        networkCount++;
+      }
+    }
+  }
+  line2 = "Flippers: " + String(flipperCount);
+  line3 = "Websockets: " + String(networkCount);
+  line1 = String(frequency) + " Mhz";
+  redraw();
+}
+
 void loop()
 {
+  long ts = millis();
   if (!apMode)
   {
     // client mode with mDNS
@@ -335,6 +418,7 @@ void loop()
       {
         Serial.print("Network IP: ");
         Serial.println(WiFi.localIP());
+        line4 = WiFi.localIP().toString();
         tryMDNS();
       }
       loopNetwork();
@@ -348,6 +432,11 @@ void loop()
     }
   }
   checkRadio();
+  if (ts - lastSecondAt >= 1000)
+  {
+    everySecond();
+    lastSecondAt = ts;
+  }
 }
 
 
@@ -437,6 +526,7 @@ void loadSettings()
       Serial.println("Access Point Mode!");
       WiFi.mode(WIFI_AP);
       WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+      line4 = apIP.toString();
       String ssid = settings["apSSID"].as<String>();
       if (settings.containsKey("apPassword"))
       {
@@ -494,6 +584,7 @@ void loadSettings()
       {
         Serial.print("Network IP: ");
         Serial.println(WiFi.localIP());
+        line4 = WiFi.localIP().toString();
         tryMDNS();
       }
     }
