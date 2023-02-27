@@ -68,11 +68,14 @@ boolean apMode = true;
 boolean captiveDNS = false;
 boolean displayInit = false;
 
+long radioRxCount = 0;
 long lastSecondAt = 0;
 String line1 = "";
 String line2 = "";
 String line3 = "";
 String line4 = "";
+
+String radioBuffer = "";
 
 //furi_hal_subghz_preset_gfsk_9_99kb_async_regs
 void flipperChatPreset()
@@ -97,6 +100,47 @@ void flipperChatPreset()
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_WORCTRL, 0xFB);
 }
 
+// The CC1101 has a buffer limit of like 53, this will break up outbound messages to small enough chunks for the flipper to receive
+void streamToRadio(String &outData)
+{
+  int data_len = outData.length();
+  //Serial.print("Data to Stream to Radio:");
+  //Serial.print("Len=");
+  //Serial.println(data_len);
+  if (data_len < 53)
+  {
+    //Serial.println("No chunking!");
+    char data_array[data_len+1];
+    outData.toCharArray(data_array, data_len+1);
+    ELECHOUSE_cc1101.SendData(data_array, data_len+1);
+  } else {
+    int chunksNeeded = (data_len / 50);
+    int lastChunkSize = (data_len % 50);
+    for(int i = 0; i <= chunksNeeded; i++)
+    {
+      //Serial.print("Chunk=");
+      //Serial.print(i);
+      int chunkLen = 50;
+      if (i == chunksNeeded)
+      {
+        chunkLen = lastChunkSize;
+      }
+      //Serial.print(" ChunkLen=");
+      //Serial.print(chunkLen);
+      int startAt = i * 50;
+      int endAt = startAt + chunkLen;
+      //Serial.print(" startAt=");
+      //Serial.print(startAt);
+      //Serial.print(" endAt=");
+      //Serial.println(endAt);
+      char data_array[chunkLen+1];
+      outData.substring(startAt, endAt).toCharArray(data_array, chunkLen+1);
+      ELECHOUSE_cc1101.SendData(data_array, chunkLen+1);
+      delay(15);
+    }
+  }
+}
+
 void processJSONPayload(int num, uint8_t * payload)
 {
   IPAddress ip = webSocketServer.remoteIP(num);
@@ -116,10 +160,7 @@ void processJSONPayload(int num, uint8_t * payload)
       {
         String text = root["text"].as<String>();
         String xmitData = "\x1B[0;33m" + username + "\x1B[0m: " + text + "\r\n";
-        int data_len = xmitData.length() + 1;
-        char data_array[data_len];
-        xmitData.toCharArray(data_array, data_len);
-        ELECHOUSE_cc1101.SendData(data_array, data_len);
+        streamToRadio(xmitData);
       } else if (root.containsKey("event")) {
         if (event.equals("join"))
         {
@@ -129,6 +170,9 @@ void processJSONPayload(int num, uint8_t * payload)
         } if (event.equals("frequency")) {
           frequency = root["mhz"].as<float>();
           ELECHOUSE_cc1101.setMHZ(frequency);
+        } else if (event.equals("raw")) {
+          String data = root["data"].as<String>();
+          streamToRadio(data);
         }
       }
       root["source"] = source;
@@ -170,10 +214,7 @@ int registerUser(int wsNum, String &username, String &source, int rssi)
       if (!source.equals("radio"))
       {
         String xmitData = "\x1B[0;33m" + username + " joined chat.\x1B[0m\r\n";
-        int data_len = xmitData.length() + 1;
-        char data_array[data_len];
-        xmitData.toCharArray(data_array, data_len);
-        ELECHOUSE_cc1101.SendData(data_array, data_len);
+        streamToRadio(xmitData);
       }
       return i;
     }
@@ -230,10 +271,7 @@ void deleteUser(int idx)
   if (!member_sources[idx].equals("radio"))
   {
     String xmitData = "\x1B[0;33m" + members[idx] + " left chat.\x1B[0m\r\n";
-    int data_len = xmitData.length() + 1;
-    char data_array[data_len];
-    xmitData.toCharArray(data_array, data_len);
-    ELECHOUSE_cc1101.SendData(data_array, data_len);
+    streamToRadio(xmitData);
   }
   members[idx] = "";
   member_nums[idx] = 0;
@@ -283,11 +321,16 @@ byte buffer[255] = {0};
 
 void checkRadio()
 {
-  if (ELECHOUSE_cc1101.CheckRxFifo(200))
+  bool rxed = false;
+  if(ELECHOUSE_cc1101.CheckRxFifo(200))
   {
-    int len = ELECHOUSE_cc1101.ReceiveData(buffer);
-    int rssi = ELECHOUSE_cc1101.getRssi();
+    int len = ELECHOUSE_cc1101.ReceiveData(buffer);    
     buffer[len] = '\0';
+    rxed = true;
+  }
+  if (rxed)
+  {
+    int rssi = ELECHOUSE_cc1101.getRssi();
     if (buffer[0] == 27 && buffer[1] == 91 && buffer[2] == 48)
     {
       char nick[20];
@@ -314,6 +357,7 @@ void checkRadio()
           break; 
         }
       }
+      radioRxCount++;
       String username = String(nick);
       String text = String(msg);
       String source = "radio";
@@ -339,21 +383,7 @@ void checkRadio()
         serializeJson(jsonBuffer, out);
         webSocketServer.broadcastTXT(out);
       }
-    }/* else {
-      String out;
-      StaticJsonDocument<2048> jsonBuffer;
-      JsonArray raw_array = jsonBuffer.createNestedArray("raw");
-      for(int i = 0; i < len; i++)
-      {
-        raw_array.add((int)buffer[i]);
-      }
-      jsonBuffer["len"] = len;
-      jsonBuffer["event"] = "raw";
-      jsonBuffer["rssi"] = rssi;
-      jsonBuffer["source"] = "radio";
-      serializeJson(jsonBuffer, out);
-      webSocketServer.broadcastTXT(out);      
-    }*/
+    }
   }
 }
 
@@ -399,7 +429,7 @@ void everySecond()
     }
   }
   line2 = "Flippers: " + String(flipperCount);
-  line3 = "Websockets: " + String(networkCount);
+  line3 = "net: " + String(networkCount) + " rrx: " + String(radioRxCount);
   line1 = String(frequency) + " Mhz";
   redraw();
 }
