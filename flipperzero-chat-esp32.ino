@@ -482,7 +482,7 @@ void everySecond()
   }
   if (flipperCount > maxFlippers)
     maxFlippers = flipperCount;
-  line2 = "Flippers: " + String(flipperCount) + "/" + String(maxFlippers);
+  line2 = "Flippers: " + String(flipperCount) + " / " + String(maxFlippers);
   line3 = "net: " + String(networkCount) + " rrx: " + String(radioRxCount);
   line1 = String(frequency) + " Mhz";
   redraw();
