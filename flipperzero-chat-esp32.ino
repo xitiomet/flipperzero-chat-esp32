@@ -68,6 +68,7 @@ boolean apMode = true;
 boolean captiveDNS = false;
 boolean displayInit = false;
 
+int maxFlippers = 0;
 long radioRxCount = 0;
 long lastSecondAt = 0;
 String line1 = "";
@@ -75,7 +76,8 @@ String line2 = "";
 String line3 = "";
 String line4 = "";
 
-String radioBuffer = "";
+byte radioBuffer[2048] = {0};
+int radioBufferPos = 0;
 
 //furi_hal_subghz_preset_gfsk_9_99kb_async_regs
 void flipperChatPreset()
@@ -104,12 +106,8 @@ void flipperChatPreset()
 void streamToRadio(String &outData)
 {
   int data_len = outData.length();
-  //Serial.print("Data to Stream to Radio:");
-  //Serial.print("Len=");
-  //Serial.println(data_len);
   if (data_len < 53)
   {
-    //Serial.println("No chunking!");
     char data_array[data_len+1];
     outData.toCharArray(data_array, data_len+1);
     ELECHOUSE_cc1101.SendData(data_array, data_len+1);
@@ -118,21 +116,13 @@ void streamToRadio(String &outData)
     int lastChunkSize = (data_len % 50);
     for(int i = 0; i <= chunksNeeded; i++)
     {
-      //Serial.print("Chunk=");
-      //Serial.print(i);
       int chunkLen = 50;
       if (i == chunksNeeded)
       {
         chunkLen = lastChunkSize;
       }
-      //Serial.print(" ChunkLen=");
-      //Serial.print(chunkLen);
       int startAt = i * 50;
       int endAt = startAt + chunkLen;
-      //Serial.print(" startAt=");
-      //Serial.print(startAt);
-      //Serial.print(" endAt=");
-      //Serial.println(endAt);
       char data_array[chunkLen+1];
       outData.substring(startAt, endAt).toCharArray(data_array, chunkLen+1);
       ELECHOUSE_cc1101.SendData(data_array, chunkLen+1);
@@ -288,6 +278,7 @@ void setup()
     member_sources[i] = "";
     member_rssi[i] = 0;
   }
+  clearRadioBuffer();
   Serial.begin(115200);
   Serial.println("INIT");
   FFat.begin();
@@ -317,41 +308,86 @@ void setup()
   Serial.println("INIT_COMPLETE");
 }
 
+void clearRadioBuffer()
+{
+  radioBufferPos = 0;
+  for(int n = 0; n < 2048; n++)
+  {
+    radioBuffer[n] = '\0';
+  }
+  //Serial.println("radio buffer cleared");
+}
+
+void appendToRadioBuffer(byte c)
+{
+  if (radioBufferPos < 2047)
+  {
+    radioBuffer[radioBufferPos] = c;
+    radioBufferPos++;
+    radioBuffer[radioBufferPos] = '\0';
+  } else {
+    //Serial.println("radio buffer overflow");
+    radioBuffer[2045] = 13;
+    radioBuffer[2046] = 10;
+    radioBuffer[2047] = '\0';
+  }
+}
+
 byte buffer[255] = {0};
 
 void checkRadio()
 {
   bool rxed = false;
-  if(ELECHOUSE_cc1101.CheckRxFifo(200))
+  int rssi = 0;
+  if(ELECHOUSE_cc1101.CheckRxFifo(50))
   {
-    int len = ELECHOUSE_cc1101.ReceiveData(buffer);    
+    int len = ELECHOUSE_cc1101.ReceiveData(buffer);
+    rssi = ELECHOUSE_cc1101.getRssi();
     buffer[len] = '\0';
-    rxed = true;
-  }
-  if (rxed)
-  {
-    int rssi = ELECHOUSE_cc1101.getRssi();
-    if (buffer[0] == 27 && buffer[1] == 91 && buffer[2] == 48)
+    for(int i = 0; i < len; i++)
     {
+      byte c = buffer[i];
+      if (radioBufferPos == 0 && c != 27)
+      {
+        // keep scanning
+        //Serial.print((char) c);
+        //Serial.println(" reset buffer");
+      } else if (radioBufferPos == 1 && c != 91) {
+        // reset not message start
+        radioBufferPos = 0;
+        //Serial.println("reset buffer2");
+      } else if ((c >= 32 && c <= 126) || c == 27 || c == 10 || c == 13) {
+        appendToRadioBuffer(c);
+      }
+    }
+    rxed = true;
+    ELECHOUSE_cc1101.SetRx();
+  }
+  if (rxed && radioBufferPos > 0)
+  {
+    if ((radioBuffer[0] == 27 && radioBuffer[1] == 91 && radioBuffer[2] == 48) && radioBuffer[radioBufferPos-1] == 10)
+    {
+      //Serial.print("RX: ");
+      //Serial.println(String((char *)radioBuffer));
       char nick[20];
       char msg[150];
       int mStart = 0;
-      for(int i = 7; i <= 254; i++)
+      for(int i = 7; i < 2048; i++)
       {
-        if (buffer[i] != 27)
+        if (radioBuffer[i] != 27)
         {
-          nick[i-7] = buffer[i];
+          nick[i-7] = radioBuffer[i];
         } else { 
           nick[i-7] = '\0';
           mStart = i+6;
           break; 
         }
       }
-      for(int i = mStart; i <= 254; i++)
+      for(int i = mStart; i < 2048; i++)
       {
-        if (buffer[i] != 0)
+        if (radioBuffer[i] != 0)
         {
-          msg[i-mStart] = buffer[i];
+          msg[i-mStart] = radioBuffer[i];
         } else { 
           msg[i-mStart] = '\0';
           break; 
@@ -383,6 +419,7 @@ void checkRadio()
         serializeJson(jsonBuffer, out);
         webSocketServer.broadcastTXT(out);
       }
+      clearRadioBuffer();
     }
   }
 }
@@ -414,6 +451,21 @@ void loopNetwork()
 
 void everySecond()
 {
+  if (!apMode)
+  {
+    uint8_t last_wl_status = wl_status;
+    wl_status = wifiMulti.run();
+    if (wl_status == WL_CONNECTED)
+    {
+      if (last_wl_status != wl_status)
+      {
+        Serial.print("Network IP: ");
+        Serial.println(WiFi.localIP());
+        line4 = WiFi.localIP().toString();
+        tryMDNS();
+      }
+    }
+  }
   int flipperCount = 0;
   int networkCount = 0;
   for(int i = 0; i < MAX_MEMBERS; i++)
@@ -428,7 +480,9 @@ void everySecond()
       }
     }
   }
-  line2 = "Flippers: " + String(flipperCount);
+  if (flipperCount > maxFlippers)
+    maxFlippers = flipperCount;
+  line2 = "Flippers: " + String(flipperCount) + "/" + String(maxFlippers);
   line3 = "net: " + String(networkCount) + " rrx: " + String(radioRxCount);
   line1 = String(frequency) + " Mhz";
   redraw();
@@ -440,17 +494,8 @@ void loop()
   if (!apMode)
   {
     // client mode with mDNS
-    uint8_t last_wl_status = wl_status;
-    wl_status = wifiMulti.run(); 
     if (wl_status == WL_CONNECTED)
     {
-      if (last_wl_status != wl_status)
-      {
-        Serial.print("Network IP: ");
-        Serial.println(WiFi.localIP());
-        line4 = WiFi.localIP().toString();
-        tryMDNS();
-      }
       loopNetwork();
     }
   } else {
