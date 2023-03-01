@@ -200,7 +200,7 @@ bool isCleanUsername(String &username)
   return true;
 }
 
-int registerUser(int wsNum, String &username, String &source, int rssi)
+void registerUser(int wsNum, String &username, String &source, int rssi)
 {
   if (isCleanUsername(username))
   {
@@ -230,7 +230,6 @@ int registerUser(int wsNum, String &username, String &source, int rssi)
           String xmitData = "\x1B[0;91m" + username + " joined chat.\x1B[0m\r\n";
           streamToRadio(xmitData);
         }
-        return i;
       }
     }
   }

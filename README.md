@@ -13,6 +13,7 @@ In order to build this you will need:
      * SmartRC-CC1101-Driver-Lib (https://github.com/LSatan/SmartRC-CC1101-Driver-Lib)
      * Ability to upload FatFS image (https://github.com/lorol/arduino-esp32fs-plugin)
      * ArduinoJson 6.19.3 (https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
+     * Adafruit_SSD1306 1.5.1 - https://github.com/adafruit/Adafruit_SSD1306
 
 
 ### Building your own bridge
@@ -51,6 +52,15 @@ Once you've downloaded the source and properly setup your IDE for flashing:
 if "apMode" is set to true the ESP32 will create a network with the settings labeled "apSSID" and "apPassword". Otherwise please add the wifi networks that should be searched for to the json array named "wifi"
 
 The "captiveDNS" setting will redirect any DNS queries to the device's apMode IP (10.10.10.1)
+
+Flash Settings for ESP32 (in aruino ide)
+ * CPU Frequency - 240Mhz
+ * Flash Frequency - 80Mhz
+ * Partition Scheme - Default 4MB with FFAT (1.2MB / 1.5MB)
+ * Flash Mode - DIO
+ * PSRAM - Disabled
+ * Events Run on - Core 0
+ * Arduino Runs on - Core 1
 
 Now you are all set to flash the sketch and upload the FatFS image.
 
