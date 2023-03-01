@@ -13,7 +13,7 @@ In order to build this you will need:
      * SmartRC-CC1101-Driver-Lib (https://github.com/LSatan/SmartRC-CC1101-Driver-Lib)
      * Ability to upload FatFS image (https://github.com/lorol/arduino-esp32fs-plugin)
      * ArduinoJson 6.19.3 (https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
-     * Adafruit_SSD1306 1.5.1 - https://github.com/adafruit/Adafruit_SSD1306
+     * Adafruit_SSD1306 2.5.1 - https://github.com/adafruit/Adafruit_SSD1306
 
 
 ### Building your own bridge
