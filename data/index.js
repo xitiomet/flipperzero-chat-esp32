@@ -110,7 +110,7 @@ function setupWebsocket()
         //logIt("Attempting to connect to Channel " + websocketChannel);
         var hostname = location.hostname;
         if (hostname == '')
-            hostname = '192.168.34.246';
+            hostname = '192.168.34.106';
         var wsUrl = 'ws://' + hostname + ':81/';
         logIt("Connecting to " + wsUrl);
         connection = new WebSocket(wsUrl, ['arduino']);
@@ -224,6 +224,10 @@ function sendMessage()
           logIt("Frequency Changed to " + mhz + " Mhz");
           document.getElementById('freq').innerHTML = mhz + " Mhz";
           var mm = {"event":"frequency", "mhz": mhz, "username": document.getElementById('nicknameField').value};
+          sendEvent(mm);
+      } else if (text.startsWith("/restart")) {
+          logIt("Restarting Device");
+          var mm = {"event":"restart", "username": document.getElementById('nicknameField').value};
           sendEvent(mm);
       } else {
           var mm = {"event":"chat", "text": text, "username": document.getElementById('nicknameField').value};

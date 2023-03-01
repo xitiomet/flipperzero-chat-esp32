@@ -133,6 +133,7 @@ void streamToRadio(String &outData)
 
 void processJSONPayload(int num, uint8_t * payload)
 {
+  boolean doRestart = false;
   IPAddress ip = webSocketServer.remoteIP(num);
   String source = ip.toString();
   char* data = (char *) payload;
@@ -149,7 +150,7 @@ void processJSONPayload(int num, uint8_t * payload)
       if (root.containsKey("text"))
       {
         String text = root["text"].as<String>();
-        String xmitData = "\x1B[0;33m" + username + "\x1B[0m: " + text + "\r\n";
+        String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
         streamToRadio(xmitData);
       } else if (root.containsKey("event")) {
         if (event.equals("join"))
@@ -163,6 +164,8 @@ void processJSONPayload(int num, uint8_t * payload)
         } else if (event.equals("raw")) {
           String data = root["data"].as<String>();
           streamToRadio(data);
+        } else if (event.equals("restart")) {
+          doRestart = true;
         }
       }
       root["source"] = source;
@@ -174,6 +177,10 @@ void processJSONPayload(int num, uint8_t * payload)
         if (i != num)
           webSocketServer.sendTXT(i, out);
       }
+    }
+    if (doRestart)
+    {
+      ESP.restart();
     }
   }
 }
@@ -203,7 +210,7 @@ int registerUser(int wsNum, String &username, String &source, int rssi)
       webSocketServer.broadcastTXT(out);
       if (!source.equals("radio"))
       {
-        String xmitData = "\x1B[0;33m" + username + " joined chat.\x1B[0m\r\n";
+        String xmitData = "\x1B[0;91m" + username + " joined chat.\x1B[0m\r\n";
         streamToRadio(xmitData);
       }
       return i;
@@ -260,7 +267,7 @@ void deleteUser(int idx)
   webSocketServer.broadcastTXT(out);
   if (!member_sources[idx].equals("radio"))
   {
-    String xmitData = "\x1B[0;33m" + members[idx] + " left chat.\x1B[0m\r\n";
+    String xmitData = "\x1B[0;91m" + members[idx] + " left chat.\x1B[0m\r\n";
     streamToRadio(xmitData);
   }
   members[idx] = "";
