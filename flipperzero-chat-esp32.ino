@@ -185,35 +185,53 @@ void processJSONPayload(int num, uint8_t * payload)
   }
 }
 
+bool isCleanUsername(String &username)
+{
+  for(int i = 0; i < username.length(); i++)
+  {
+    char cc = username.charAt(i);
+    if (cc >= 32 && cc <= 126)
+    {
+      // character is ok
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
 int registerUser(int wsNum, String &username, String &source, int rssi)
 {
-  for(int i = 0; i < MAX_MEMBERS; i++)
+  if (isCleanUsername(username))
   {
-    if (members[i] == "" || members[i].equals(username))
+    for(int i = 0; i < MAX_MEMBERS; i++)
     {
-      members[i] = username;
-      member_nums[i] = wsNum;
-      member_sources[i] = source;
-      member_rssi[i] = rssi;
-      String out;
-      StaticJsonDocument<2048> jsonBuffer;
-      jsonBuffer["username"] = members[i];
-      jsonBuffer["event"] = "join";
-      jsonBuffer["rssi"] = rssi;
-      if (source.equals("radio"))
+      if (members[i] == "" || members[i].equals(username))
       {
-        jsonBuffer["source"] = "radio";
-      } else {
-        jsonBuffer["source"] = source;
+        members[i] = username;
+        member_nums[i] = wsNum;
+        member_sources[i] = source;
+        member_rssi[i] = rssi;
+        String out;
+        StaticJsonDocument<2048> jsonBuffer;
+        jsonBuffer["username"] = members[i];
+        jsonBuffer["event"] = "join";
+        jsonBuffer["rssi"] = rssi;
+        if (source.equals("radio"))
+        {
+          jsonBuffer["source"] = "radio";
+        } else {
+          jsonBuffer["source"] = source;
+        }
+        serializeJson(jsonBuffer, out);
+        webSocketServer.broadcastTXT(out);
+        if (!source.equals("radio"))
+        {
+          String xmitData = "\x1B[0;91m" + username + " joined chat.\x1B[0m\r\n";
+          streamToRadio(xmitData);
+        }
+        return i;
       }
-      serializeJson(jsonBuffer, out);
-      webSocketServer.broadcastTXT(out);
-      if (!source.equals("radio"))
-      {
-        String xmitData = "\x1B[0;91m" + username + " joined chat.\x1B[0m\r\n";
-        streamToRadio(xmitData);
-      }
-      return i;
     }
   }
 }

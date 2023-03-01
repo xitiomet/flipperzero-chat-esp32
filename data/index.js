@@ -7,6 +7,32 @@ var keepAliveInterval;
 var lastTyped = 0;
 var typing = false;
 
+function setCookie(cname, cvalue, exdays) 
+{
+  const d = new Date();
+  d.setTime(d.getTime() + (exdays*24*60*60*1000));
+  let expires = "expires="+ d.toUTCString();
+  document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+}
+
+function getCookie(cname) 
+{
+  let name = cname + "=";
+  let decodedCookie = decodeURIComponent(document.cookie);
+  let ca = decodedCookie.split(';');
+  for(let i = 0; i <ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) == ' ') {
+      c = c.substring(1);
+    }
+    if (c.indexOf(name) == 0) {
+      return c.substring(name.length, c.length);
+    }
+  }
+  return null;
+}
+
+
 function sendEvent(wsEvent)
 {
     var out_event = JSON.stringify(wsEvent);
@@ -195,12 +221,21 @@ function setupWebsocket()
 }
 
 window.onload = function() {
-    var a = Math.floor(100000 + Math.random() * 900000);   
-    a = String(a);
-    a = a.substring(0,4);
-    
-    var nickname = prompt('enter nickname', 'Hacker' + a);
-    document.getElementById("nicknameField").value = nickname;
+    var savedNickname = getCookie("username");
+    if (savedNickname == null)
+    {
+        var a = Math.floor(100000 + Math.random() * 900000);   
+        a = String(a);
+        a = a.substring(0,4);
+        var suggested =  'Hacker' + a;
+        var nickname = prompt('enter nickname', suggested);
+        if (nickname == null)
+            nickname = suggested;
+        setCookie("username", nickname, 30);
+        document.getElementById("nicknameField").value = nickname;
+    } else {
+        document.getElementById("nicknameField").value = savedNickname;
+    }
     setupWebsocket();
     $("#messageBox").keyup(function(event) {
         if (event.keyCode === 13) {
