@@ -29,6 +29,18 @@ In order to build this you will need:
 
 Please note: The GDO0 and GDO2 pins are left unconnected.
 
+Optionally you can add a screen using an SSD1306 OLED module.
+https://www.amazon.com/gp/product/B0833PF7ML/
+
+ ESP-32 | SSD1306
+ -------|--------
+ 3.3v   | VIN
+ GND    | GND
+ GPIO21 | SDA
+ GPIO22 | SCL
+
+![Flipper Chat Module](https://openstatic.org/img/flipperchatmodule.png)
+
 Once you've downloaded the source and properly setup your IDE for flashing:
   1. copy "base-settings.json" to "data/settings.json"
   2. edit the settings.json file in the data directory. This will be loaded at startup.
