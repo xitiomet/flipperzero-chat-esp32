@@ -217,19 +217,15 @@ void registerUser(int wsNum, String &username, String &source, int rssi)
         jsonBuffer["username"] = members[i];
         jsonBuffer["event"] = "join";
         jsonBuffer["rssi"] = rssi;
-        if (source.equals("radio"))
-        {
-          jsonBuffer["source"] = "radio";
-        } else {
-          jsonBuffer["source"] = source;
-        }
+        jsonBuffer["source"] = source;
         serializeJson(jsonBuffer, out);
         webSocketServer.broadcastTXT(out);
-        if (!source.equals("radio"))
+        if (!source.equals("radio") && !source.equals("flipper"))
         {
           String xmitData = "\x1B[0;91m" + username + " joined chat.\x1B[0m\r\n";
           streamToRadio(xmitData);
         }
+        return;
       }
     }
   }
@@ -282,7 +278,7 @@ void deleteUser(int idx)
   jsonBuffer["source"] = member_sources[idx];
   serializeJson(jsonBuffer, out);
   webSocketServer.broadcastTXT(out);
-  if (!member_sources[idx].equals("radio"))
+  if (!member_sources[idx].equals("radio") && !member_sources[idx].equals("flipper"))
   {
     String xmitData = "\x1B[0;91m" + members[idx] + " left chat.\x1B[0m\r\n";
     streamToRadio(xmitData);
@@ -421,6 +417,8 @@ void checkRadio()
       String username = String(nick);
       String text = String(msg);
       String source = "radio";
+      if (radioBuffer[4] == 51 && radioBuffer[5] == 49)
+        source = "flipper";
       if (username.indexOf(" joined chat.") >= 0)
       {
         String realUsername = String(username.substring(0, username.length() - 13));
@@ -496,7 +494,7 @@ void everySecond()
   {
     if (members[i] != "")
     {
-      if (member_sources[i].equals("radio"))
+      if (member_sources[i].equals("flipper"))
       {
         flipperCount++;
       } else {

@@ -164,9 +164,11 @@ function setupWebsocket()
                 for (var i = 0; i < usersList.length; i++) 
                 {
                     var user = usersList[i];
-                    if (user.s == 'radio')
+                    if (user.s == 'flipper')
                     {
                         updateUserNick(user.u, "RSSI " + user.r, "flipper.png");
+                    } else if (user.s == 'radio') {
+                        updateUserNick(user.u, "RSSI " + user.r, "spy.png");
                     } else {
                         updateUserNick(user.u, user.s, "spy.png");
                     }
@@ -181,10 +183,13 @@ function setupWebsocket()
                         var picture = "spy.png";
                         if (jsonObject.hasOwnProperty('source'))
                         {
-                            if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "radio")
+                            if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "flipper")
                             {
                                 picture = "flipper.png";
                                 updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "flipper.png");
+                            } else if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "radio") {
+                                picture = "spy.png";
+                                updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "spy.png");
                             } else {
                                 updateUserNick(jsonObject.username, jsonObject.source, "spy.png");
                             }
@@ -194,9 +199,11 @@ function setupWebsocket()
                 } else if (event == 'join') {
                     if (jsonObject.hasOwnProperty('source'))
                     {
-                        if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "radio")
+                        if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "flipper")
                         {
                             updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "flipper.png");
+                        } else if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "radio") {
+                            updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "spy.png");
                         } else {
                             updateUserNick(jsonObject.username, jsonObject.source, "spy.png");
                         }
