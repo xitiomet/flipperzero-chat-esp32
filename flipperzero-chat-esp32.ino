@@ -166,6 +166,8 @@ void processJSONPayload(int num, uint8_t * payload)
           streamToRadio(data);
         } else if (event.equals("restart")) {
           doRestart = true;
+        } else if (event.equals("radioReset")) {
+          flipperChatPreset();
         }
       }
       root["source"] = source;
@@ -305,6 +307,8 @@ void setup()
   loadSettings();
   ELECHOUSE_cc1101.Init();
   flipperChatPreset();
+  String message = "\x1B[0;91mSub-GHZ chat bridge now online.\x1B[0m\r\n";
+  streamToRadio(message);
   webSocketServer.begin();
   webSocketServer.onEvent(webSocketServerEvent);
   httpServer.on("/", handleRoot);
@@ -417,8 +421,16 @@ void checkRadio()
       String username = String(nick);
       String text = String(msg);
       String source = "radio";
-      if (radioBuffer[4] == 51 && radioBuffer[5] == 49)
+      //Serial.print("color: ");
+      //Serial.print((int)radioBuffer[4]);
+      //Serial.print((int)radioBuffer[5]);
+      //Serial.print(" ");
+      //Serial.print((char)radioBuffer[4]);
+      //Serial.println((char)radioBuffer[5]);
+      if (radioBuffer[4] == 51 && (radioBuffer[5] == 51 || radioBuffer[5] == 49 || radioBuffer[5] == 52))
+      {
         source = "flipper";
+      }
       if (username.indexOf(" joined chat.") >= 0)
       {
         String realUsername = String(username.substring(0, username.length() - 13));

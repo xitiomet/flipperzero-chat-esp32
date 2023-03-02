@@ -9,7 +9,7 @@ In order to build this you will need:
  * ESP32 - https://www.amazon.com/gp/product/B09GK74F7N/
  * CC1101 - https://www.amazon.com/gp/product/B01DS1WUEQ/
  * Computer with Arduino 1.8.18
-     * ESP32 library support (https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json)
+     * ESP32 library support 2.0.5 (https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json)
      * SmartRC-CC1101-Driver-Lib (https://github.com/LSatan/SmartRC-CC1101-Driver-Lib)
      * Ability to upload FatFS image (https://github.com/lorol/arduino-esp32fs-plugin)
      * ArduinoJson 6.19.3 (https://arduinojson.org/?utm_source=meta&utm_medium=library.properties)
