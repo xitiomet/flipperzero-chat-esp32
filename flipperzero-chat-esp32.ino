@@ -78,28 +78,38 @@ String line4 = "";
 
 byte radioBuffer[2048] = {0};
 int radioBufferPos = 0;
+int radioRssi = 0;
 
 //furi_hal_subghz_preset_gfsk_9_99kb_async_regs
 void flipperChatPreset()
 {
   ELECHOUSE_cc1101.setMHZ(frequency);
-  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FIFOTHR, 0x47);
+  //ELECHOUSE_cc1101.SpiWriteReg(CC1101_IOCFG0, 0x0D); //GDO0 Output Pin Configuration
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FIFOTHR, 0x47); //RX FIFO and TX FIFO Thresholds
+  //1 : CRC calculation in TX and CRC check in RX enabled,
+  //1 : Variable packet length mode. Packet length configured by the first byte after sync word
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_PKTCTRL0, 0x05);
-  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FSCTRL1, 0x06);
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FSCTRL1, 0x06); //Frequency Synthesizer Control
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_SYNC1, 0x46);
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_SYNC0, 0x4C);
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_ADDR, 0x00);
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_PKTLEN, 0x00);
-  ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG4, 0xC8);
-  ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG3, 0x93);
-  ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG2, 0x12);
-  ELECHOUSE_cc1101.SpiWriteReg(CC1101_DEVIATN, 0x34);
-  ELECHOUSE_cc1101.SpiWriteReg(CC1101_MCSM0, 0x18);
-  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FOCCFG, 0x16);
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG4, 0xC8); //Modem Configuration 9.99
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG3, 0x93); //Modem Configuration
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG2, 0x12); // 2: 16/16 sync word bits detected
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_DEVIATN, 0x34); //Deviation = 19.042969
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_MCSM0, 0x18);   //Main Radio Control State Machine Configuration
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FOCCFG, 0x16);  //Frequency Offset Compensation Configuration
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0x43);
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL1, 0x40);
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL0, 0x91);
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_WORCTRL, 0xFB);
+}
+
+void advertiseGateway(String &ssid, String &ip)
+{
+  String message = "\x1B[0;94mSubGhz Chat Bridge now online\x1B[0m\r\n SSID " + ssid + "\r\n IP " + ip + "\r\n";
+  streamToRadio(message);
 }
 
 // The CC1101 has a buffer limit of like 53, this will break up outbound messages to small enough chunks for the flipper to receive
@@ -150,6 +160,12 @@ void processJSONPayload(int num, uint8_t * payload)
       if (root.containsKey("text"))
       {
         String text = root["text"].as<String>();
+        Serial.print("(");
+        Serial.print(source);
+        Serial.print(") ");
+        Serial.print(username);
+        Serial.print(": ");
+        Serial.println(text);
         String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
         streamToRadio(xmitData);
       } else if (root.containsKey("event")) {
@@ -210,12 +226,14 @@ void registerUser(int wsNum, String &username, String &source, int rssi)
     {
       if (members[i] == "" || members[i].equals(username))
       {
+        Serial.print(username);
+        Serial.println(" joined the chat");
         members[i] = username;
         member_nums[i] = wsNum;
         member_sources[i] = source;
         member_rssi[i] = rssi;
         String out;
-        StaticJsonDocument<2048> jsonBuffer;
+        StaticJsonDocument<1024> jsonBuffer;
         jsonBuffer["username"] = members[i];
         jsonBuffer["event"] = "join";
         jsonBuffer["rssi"] = rssi;
@@ -224,7 +242,7 @@ void registerUser(int wsNum, String &username, String &source, int rssi)
         webSocketServer.broadcastTXT(out);
         if (!source.equals("radio") && !source.equals("flipper"))
         {
-          String xmitData = "\x1B[0;91m" + username + " joined chat.\x1B[0m\r\n";
+          String xmitData = "\x1B[0;92m" + username + " joined chat.\x1B[0m\r\n";
           streamToRadio(xmitData);
         }
         return;
@@ -272,8 +290,10 @@ int deleteUser(String &username)
 
 void deleteUser(int idx)
 {
+  Serial.print(members[idx]);
+  Serial.println(" left the chat");
   String out;
-  StaticJsonDocument<2048> jsonBuffer;
+  StaticJsonDocument<1024> jsonBuffer;
   jsonBuffer["username"] = members[idx];
   jsonBuffer["event"] = "part";
   jsonBuffer["rssi"] = member_rssi[idx];
@@ -282,7 +302,7 @@ void deleteUser(int idx)
   webSocketServer.broadcastTXT(out);
   if (!member_sources[idx].equals("radio") && !member_sources[idx].equals("flipper"))
   {
-    String xmitData = "\x1B[0;91m" + members[idx] + " left chat.\x1B[0m\r\n";
+    String xmitData = "\x1B[0;90m" + members[idx] + " left chat.\x1B[0m\r\n";
     streamToRadio(xmitData);
   }
   members[idx] = "";
@@ -303,12 +323,14 @@ void setup()
   clearRadioBuffer();
   Serial.begin(115200);
   Serial.println("INIT");
+  if (ELECHOUSE_cc1101.getCC1101())
+  {
+    Serial.println("CC1101 Connection OK");
+  } else {
+    Serial.println("CC1101 Connection Error");
+  }
   FFat.begin();
   loadSettings();
-  ELECHOUSE_cc1101.Init();
-  flipperChatPreset();
-  String message = "\x1B[0;91mSub-GHZ chat bridge now online.\x1B[0m\r\n";
-  streamToRadio(message);
   webSocketServer.begin();
   webSocketServer.onEvent(webSocketServerEvent);
   httpServer.on("/", handleRoot);
@@ -350,23 +372,75 @@ void appendToRadioBuffer(byte c)
     radioBufferPos++;
     radioBuffer[radioBufferPos] = '\0';
   } else {
-    //Serial.println("radio buffer overflow");
-    radioBuffer[2045] = 13;
-    radioBuffer[2046] = 10;
-    radioBuffer[2047] = '\0';
+    clearRadioBuffer();
   }
 }
 
 byte buffer[255] = {0};
 
+void readChatFromRadioBuffer()
+{
+  char nick[20];
+  char msg[1024];
+  int mStart = 0;
+  for(int i = 7; i < 2048; i++)
+  {
+    if (radioBuffer[i] != 27)
+    {
+      nick[i-7] = radioBuffer[i];
+    } else { 
+      nick[i-7] = '\0';
+      mStart = i+6;
+      break; 
+    }
+  }
+  for(int i = mStart; i < 2048; i++)
+  {
+    if (radioBuffer[i] != 0)
+    {
+      msg[i-mStart] = radioBuffer[i];
+    } else { 
+      msg[i-mStart] = '\0';
+      break; 
+    }
+  }
+  radioRxCount++;
+  String username = String(nick);
+  String text = String(msg);
+  text.trim();
+  String source = "radio";
+  if (radioBuffer[4] == 51 && radioBuffer[5] == 51)
+  {
+    source = "flipper";
+  }
+  if (findUser(username) == -1)
+  {
+    registerUser(0, username, source, radioRssi);
+  }
+  Serial.print("(");
+  Serial.print(source);
+  Serial.print(") ");
+  Serial.print(username);
+  Serial.print(": ");
+  Serial.println(text);
+  String out;
+  StaticJsonDocument<3072> jsonBuffer;
+  jsonBuffer["username"] = username;
+  jsonBuffer["text"] = text;
+  jsonBuffer["event"] = "chat";
+  jsonBuffer["rssi"] = radioRssi;
+  jsonBuffer["source"] = source;
+  serializeJson(jsonBuffer, out);
+  webSocketServer.broadcastTXT(out);
+}
+
 void checkRadio()
 {
   bool rxed = false;
-  int rssi = 0;
   if(ELECHOUSE_cc1101.CheckRxFifo(50))
   {
     int len = ELECHOUSE_cc1101.ReceiveData(buffer);
-    rssi = ELECHOUSE_cc1101.getRssi();
+    radioRssi = ELECHOUSE_cc1101.getRssi();
     buffer[len] = '\0';
     for(int i = 0; i < len; i++)
     {
@@ -391,67 +465,30 @@ void checkRadio()
   {
     if ((radioBuffer[0] == 27 && radioBuffer[1] == 91 && radioBuffer[2] == 48) && radioBuffer[radioBufferPos-1] == 10)
     {
-      //Serial.print("RX: ");
-      //Serial.println(String((char *)radioBuffer));
-      char nick[20];
-      char msg[150];
-      int mStart = 0;
-      for(int i = 7; i < 2048; i++)
-      {
-        if (radioBuffer[i] != 27)
-        {
-          nick[i-7] = radioBuffer[i];
-        } else { 
-          nick[i-7] = '\0';
-          mStart = i+6;
-          break; 
-        }
-      }
-      for(int i = mStart; i < 2048; i++)
-      {
-        if (radioBuffer[i] != 0)
-        {
-          msg[i-mStart] = radioBuffer[i];
-        } else { 
-          msg[i-mStart] = '\0';
-          break; 
-        }
-      }
-      radioRxCount++;
-      String username = String(nick);
-      String text = String(msg);
-      String source = "radio";
       //Serial.print("color: ");
       //Serial.print((int)radioBuffer[4]);
       //Serial.print((int)radioBuffer[5]);
       //Serial.print(" ");
       //Serial.print((char)radioBuffer[4]);
       //Serial.println((char)radioBuffer[5]);
-      if (radioBuffer[4] == 51 && (radioBuffer[5] == 51 || radioBuffer[5] == 49 || radioBuffer[5] == 52))
+      if ((radioBuffer[4] == 51 && radioBuffer[5] == 51) || (radioBuffer[4] == 57 && radioBuffer[5] == 49))
       {
-        source = "flipper";
-      }
-      if (username.indexOf(" joined chat.") >= 0)
-      {
-        String realUsername = String(username.substring(0, username.length() - 13));
-        registerUser(0, realUsername, source, rssi);
-      } else if (username.indexOf(" left chat.") >= 0 || text.indexOf(" left chat.") >= 0) {
-        String realUsername = String(username.substring(0, username.length() - 11));
-        deleteUser(realUsername);
+        readChatFromRadioBuffer();
       } else {
-        if (findUser(username) == -1)
+        String source = "radio";
+        if (radioBuffer[4] == 51 && (radioBuffer[5] == 52 || radioBuffer[5] == 49))
         {
-          registerUser(0, username, source, rssi);
+          source = "flipper";
         }
-        String out;
-        StaticJsonDocument<4096> jsonBuffer;
-        jsonBuffer["username"] = username;
-        jsonBuffer["text"] = text;
-        jsonBuffer["event"] = "chat";
-        jsonBuffer["rssi"] = rssi;
-        jsonBuffer["source"] = source;
-        serializeJson(jsonBuffer, out);
-        webSocketServer.broadcastTXT(out);
+        String data = String((char *)radioBuffer);
+        if (data.indexOf(" joined chat.") >= 0)
+        {
+          String realUsername = String(data.substring(7, data.length() - 19));
+          registerUser(0, realUsername, source, radioRssi);
+        } else if (data.indexOf(" left chat.") >= 0) {
+          String realUsername = String(data.substring(7, data.length() - 17));
+          deleteUser(realUsername);
+        }
       }
       clearRadioBuffer();
     }
@@ -493,10 +530,7 @@ void everySecond()
     {
       if (last_wl_status != wl_status)
       {
-        Serial.print("Network IP: ");
-        Serial.println(WiFi.localIP());
-        line4 = WiFi.localIP().toString();
-        tryMDNS();
+        onNetworkConnect();
       }
     }
   }
@@ -588,6 +622,19 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
     }
 }
 
+void onNetworkConnect()
+{
+  String ssid = WiFi.SSID();
+  String ip = WiFi.localIP().toString();
+  Serial.print("SSID: ");
+  Serial.println(ssid);
+  Serial.print("Network IP: ");
+  Serial.println(ip);
+  line4 = ip;
+  tryMDNS();
+  advertiseGateway(ssid, ip);
+}
+
 void tryMDNS()
 {
   if (!mdns_started)
@@ -622,6 +669,8 @@ void loadSettings()
     {
       frequency = settings["startFrequency"].as<float>();
     }
+    ELECHOUSE_cc1101.Init();
+    flipperChatPreset();
     if (settings.containsKey("apMode") && settings.containsKey("apSSID"))
     {
       apMode = settings["apMode"].as<bool>();
@@ -637,6 +686,7 @@ void loadSettings()
       WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
       line4 = apIP.toString();
       String ssid = settings["apSSID"].as<String>();
+      advertiseGateway(ssid, line4);
       if (settings.containsKey("apPassword"))
       {
         String password = settings["apPassword"].as<String>();
@@ -651,7 +701,6 @@ void loadSettings()
         }
       } else {
         Serial.println("AP has no password");
-        String ssid = settings["apSSID"].as<String>();
         WiFi.softAP(ssid.c_str(), NULL);
       }
       wl_status = WL_CONNECTED;
@@ -691,10 +740,7 @@ void loadSettings()
       wl_status = wifiMulti.run();
       if (wl_status == WL_CONNECTED)
       {
-        Serial.print("Network IP: ");
-        Serial.println(WiFi.localIP());
-        line4 = WiFi.localIP().toString();
-        tryMDNS();
+        onNetworkConnect();
       }
     }
   }
