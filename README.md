@@ -40,7 +40,10 @@ https://www.amazon.com/gp/product/B0833PF7ML/
  GPIO22 | SCL
 
 A picture of my finished device.
+
 ![Flipper Chat Module](https://openstatic.org/img/flipperchatmodule.png)
+
+*Adding the display was important for me to know when there are active flippers nearby. The display shows how many flippers are currently active and what the peak was. You can also see how many radio packets were received and how many network users are connected.*
 
 Once you've downloaded the source and properly setup your IDE for flashing:
   1. copy "base-settings.json" to "data/settings.json"
@@ -89,6 +92,8 @@ The catch is the CC1101 can only tune into one frequency, so everyone must be on
 
 At any point while in the chat screen a connected user may type "/freq 433.92" to change the frequency, the new frequency must be expressed in Mhz.
 
+If the gateway starts malfunctioning any web user can type "/restart" to reboot it remotely.
+
 ### Websocket protocol
 
 If you would like to make your own client to interface with this device the protocol is pretty simple. port 81 is a websocket server all messages are single line json objects.
@@ -128,3 +133,40 @@ To change the frequency
 ```json
 {"event":"frequency", "mhz": 315, "username": "Hacker5091"}
 ```
+
+### How do flipper chat messages work?
+
+Thought i would add some details on my reverse engineering of the flipper chat protocol. After getting the radio stuff tuned just right you have a packet radio!
+
+(legit dont have any idea why the settings that work are the correct settings, copied the parameters from the flipper source.)
+
+Once you have your radio parameters correct, the next step is to realize that the CC1101 can only send and receieve 62 bytes at a time due to the buffer size limitations. I realized this a bit after the fact and had to incorporate buffering/chunking for long messages.
+
+Once that is figured out we can start to think of this as a serial cable between two terminals, in fact the chat protocol uses ANSI escape codes as part of the message to show up in color on the receiving end. This made things really easy, once i knew that every message started with an escape sequency.
+
+A typical message looks like this:
+```
+\x1B[0;33mUSERNAME\x1B[0m: Hello I'm a message\r\n
+```
+
+1B in hex represents the escape character (27) so any message not starting with a 27 is probably not meant for us.
+
+I also noticed join/part messages used different color codes
+
+```
+\x1B[0;32mUSERNAME joined the chat.\x1B[0m\r\n
+```
+
+```
+\x1B[0;31mUSERNAME left the chat.\x1B[0m\r\n
+```
+
+using the color codes supplied by the flipper Chat(33 amber), join(32 green), leave(31 red) its not hard to tell the message types apart.
+
+This led me to some curiosity if the flipper cared about the color codes or not, turns out it doesn't any text will just be displayed on the receiving end!
+
+I decided that the bridge would use different color codes for it's users allowing both the flipper users and web users to tell each other apart
+
+I went with chat(91 bright red), join(92 bright green) and leave(90 Grey)
+
+Now the gateway can select proper avatars for flippers and other gateways.
