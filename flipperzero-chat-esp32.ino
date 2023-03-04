@@ -108,7 +108,7 @@ void flipperChatPreset()
 
 void advertiseGateway(String &ssid, String &ip)
 {
-  String message = "\x1B[0;94mSubGhz Chat Bridge now online\x1B[0m\r\n SSID " + ssid + "\r\n IP " + ip + "\r\n";
+  String message = "\x1B[0;94mSubGhz Chat Bridge - now online\x1B[0m\r\n SSID " + ssid + "\r\n IP " + ip + "\r\n";
   streamToRadio(message);
 }
 
