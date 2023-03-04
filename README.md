@@ -39,6 +39,7 @@ https://www.amazon.com/gp/product/B0833PF7ML/
  GPIO21 | SDA
  GPIO22 | SCL
 
+A picture of my finished device.
 ![Flipper Chat Module](https://openstatic.org/img/flipperchatmodule.png)
 
 Once you've downloaded the source and properly setup your IDE for flashing:
@@ -79,6 +80,8 @@ Now you are all set to flash the sketch and upload the FatFS image.
 ### Using the web interface
 
 Navigate a web browser to the ESP32's ip (output on the serial console) and you will be prompted to enter a nickname. Multiple users and computers are able to connect to the same ESP32 with distinct nicknames, they will see each others messages, as well as flipper users.
+
+![Multi User Example](https://openstatic.org/img/fzcb_multi_user.png)
 
 Technically you could build two bridges and they would be able to communicate with each other as well.
 
