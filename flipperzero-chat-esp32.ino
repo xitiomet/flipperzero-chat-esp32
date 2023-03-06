@@ -42,7 +42,7 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define PIX_ROW_1 0
-#define PIX_ROW_1p5 8
+#define PIX_ROW_1p5 14
 #define PIX_ROW_2 24
 #define PIX_ROW_3 40
 #define PIX_ROW_4 56
@@ -76,6 +76,10 @@ String line2 = "";
 String line3 = "";
 String line4 = "";
 
+String flashMessageTitle = "";
+String flashMessageBody = "";
+long flashMessageAt = 0;
+
 byte radioBuffer[2048] = {0};
 int radioBufferPos = 0;
 int radioRssi = 0;
@@ -108,7 +112,7 @@ void flipperChatPreset()
 
 void advertiseGateway(String &ssid, String &ip)
 {
-  String message = "\x1B[0;94mSubGhz Chat Bridge - now online\x1B[0m\r\n SSID " + ssid + "\r\n IP " + ip + "\r\n";
+  String message = "\x1B[0;94mSubGhz Chat Bridge - Online\x1B[0m\r\n FREQUENCY " + String(frequency) + " Mhz\r\n SSID " + ssid + "\r\n IP " + ip + "\r\n";
   streamToRadio(message);
 }
 
@@ -168,6 +172,7 @@ void processJSONPayload(int num, uint8_t * payload)
         Serial.println(text);
         String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
         streamToRadio(xmitData);
+        flashMessage(username, text);
       } else if (root.containsKey("event")) {
         if (event.equals("join"))
         {
@@ -228,6 +233,8 @@ void registerUser(int wsNum, String &username, String &source, int rssi)
       {
         Serial.print(username);
         Serial.println(" joined the chat");
+        String bdy = "Joined the chat";
+        flashMessage(username, bdy);
         members[i] = username;
         member_nums[i] = wsNum;
         member_sources[i] = source;
@@ -292,6 +299,8 @@ void deleteUser(int idx)
 {
   Serial.print(members[idx]);
   Serial.println(" left the chat");
+  String bdy = "Left the chat";
+  flashMessage(members[idx], bdy);
   String out;
   StaticJsonDocument<1024> jsonBuffer;
   jsonBuffer["username"] = members[idx];
@@ -432,6 +441,7 @@ void readChatFromRadioBuffer()
   jsonBuffer["source"] = source;
   serializeJson(jsonBuffer, out);
   webSocketServer.broadcastTXT(out);
+  flashMessage(username,text);
 }
 
 void checkRadio()
@@ -495,21 +505,38 @@ void checkRadio()
   }
 }
 
+void flashMessage(String &title, String &body)
+{
+  flashMessageAt = millis();
+  flashMessageTitle = title;
+  flashMessageBody = body;
+}
+
 void redraw()
 {
   if (displayInit)
   {
     display.clearDisplay();
-    display.setCursor(0,PIX_ROW_1);
-    display.setTextSize(2);
-    display.print(line1);
-    display.setTextSize(1);
-    display.setCursor(0,PIX_ROW_2);
-    display.print(line2);
-    display.setCursor(0,PIX_ROW_3);
-    display.print(line3);
-    display.setCursor(0,PIX_ROW_4);
-    display.print(line4);
+    if (flashMessageAt > 0 && (millis() - flashMessageAt) < 10000)
+    {
+      display.setCursor(0,PIX_ROW_1);
+      display.setTextSize(1);
+      display.print(flashMessageTitle);
+      display.drawLine(0, 10, display.width()-1, 10, SSD1306_WHITE);
+      display.setCursor(0,PIX_ROW_1p5);
+      display.print(flashMessageBody);
+    } else {
+      display.setCursor(0,PIX_ROW_1);
+      display.setTextSize(2);
+      display.print(line1);
+      display.setTextSize(1);
+      display.setCursor(0,PIX_ROW_2);
+      display.print(line2);
+      display.setCursor(0,PIX_ROW_3);
+      display.print(line3);
+      display.setCursor(0,PIX_ROW_4);
+      display.print(line4);
+    }
     display.display();
   }
 }
@@ -531,6 +558,11 @@ void everySecond()
       if (last_wl_status != wl_status)
       {
         onNetworkConnect();
+      }
+    } else {
+      if (last_wl_status != wl_status)
+      {
+        line4 = "";
       }
     }
   }
