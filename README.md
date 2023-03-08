@@ -4,6 +4,8 @@ This project will allow you to communicate with [FlipperZero](https://flipperzer
 
 The chat bridge provides a web interface allowing multiple user's with different nicknames to connect and communicate with nearby flipper devices.
 
+*Special thanks to [samxplogs](https://github.com/samxplogs) for demonstrating this project in his video [here](https://www.youtube.com/watch?v=x6qY3p6Ga5Q)*
+
 In order to build this you will need:
 
  * ESP32 - https://www.amazon.com/gp/product/B09GK74F7N/
