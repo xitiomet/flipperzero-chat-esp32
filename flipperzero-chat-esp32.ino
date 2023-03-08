@@ -228,7 +228,7 @@ void processJSONPayload(int num, uint8_t * payload)
       }
       root["source"] = source;
       root["num"] = num;
-      if (!root.containsKey("utc"))
+      if (!root.containsKey("utc") && timeStatus() == timeSet)
       {
         root["utc"] = now();
       }
@@ -309,10 +309,9 @@ void deleteUsersForNum(int wsNum)
   {
     for(int i = 0; i < MAX_MEMBERS; i++)
     {
-      if (member_nums[i] == wsNum)
+      if (member_nums[i] == wsNum && !members[i].equals(""))
       {
         deleteUser(i);
-        return;
       }
     }
   }
@@ -360,7 +359,7 @@ void deleteUser(int idx)
     streamToRadio(xmitData);
   }
   members[idx] = "";
-  member_nums[idx] = 0;
+  member_nums[idx] = -1;
   member_sources[idx] = "";
   member_rssi[idx] = 0;
 }
@@ -370,7 +369,7 @@ void setup()
   for(int i = 0; i < MAX_MEMBERS; i++)
   {
     members[i] = "";
-    member_nums[i] = 0;
+    member_nums[i] = -1;
     member_sources[i] = "";
     member_rssi[i] = 0;
   }
@@ -473,7 +472,7 @@ void readChatFromRadioBuffer()
   }
   if (findUser(username) == -1)
   {
-    registerUser(0, username, source, radioRssi);
+    registerUser(-1, username, source, radioRssi);
   }
   Serial.print("(");
   Serial.print(source);
@@ -545,7 +544,7 @@ void checkRadio()
         if (data.indexOf(" joined chat.") >= 0)
         {
           String realUsername = String(data.substring(7, data.length() - 19));
-          registerUser(0, realUsername, source, radioRssi);
+          registerUser(-1, realUsername, source, radioRssi);
         } else if (data.indexOf(" left chat.") >= 0) {
           String realUsername = String(data.substring(7, data.length() - 17));
           deleteUser(realUsername);
