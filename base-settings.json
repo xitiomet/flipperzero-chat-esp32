@@ -4,6 +4,7 @@
     "captiveDNS": false,
     "apSSID": "FlipperChat",
     "apPassword": "changeme",
+    "replayChatHistory": true,
     "wifi": [
         {
           "ssid": "",

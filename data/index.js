@@ -108,9 +108,11 @@ function addOutgoingMessage(text)
 
 }
 
-function addIncomingMessage(username, text, picture = "flipper.png")
+function addIncomingMessage(username, text, picture = "flipper.png", timestamp = null)
 {
     var d = new Date();
+    if (timestamp != null)
+        d = new Date(timestamp * 1000);
     var dString = d.toLocaleTimeString();
     var incoming_msg_div = document.createElement("div");
     incoming_msg_div.className = "incoming_msg"; // also active_chat
@@ -142,7 +144,7 @@ function setupWebsocket()
         connection = new WebSocket(wsUrl, ['arduino']);
         connection.onopen = function () {
             logIt("Connected to ESP32<br />To change the frequency of the chat server, type:<br />/freq 315.0 (315 mhz)");
-            sendEvent({"event": "join", "username": document.getElementById("nicknameField").value});
+            sendEvent({"event": "join", "username": document.getElementById("nicknameField").value, "utc": Math.floor(Date.now() / 1000)});
         };
 
         connection.onerror = function (error) {
@@ -194,7 +196,12 @@ function setupWebsocket()
                                 updateUserNick(jsonObject.username, jsonObject.source, "spy.png");
                             }
                         }
-                        addIncomingMessage(jsonObject.username, escapeHTML(jsonObject.text), picture);
+                        var timestamp = null;
+                        if (jsonObject.hasOwnProperty('utc'))
+                        {
+                            timestamp = jsonObject.utc;
+                        }
+                        addIncomingMessage(jsonObject.username, escapeHTML(jsonObject.text), picture, timestamp);
                     }
                 } else if (event == 'join') {
                     if (jsonObject.hasOwnProperty('source'))
@@ -272,7 +279,7 @@ function sendMessage()
           var mm = {"event":"restart", "username": document.getElementById('nicknameField').value};
           sendEvent(mm);
       } else {
-          var mm = {"event":"chat", "text": text, "username": document.getElementById('nicknameField').value};
+          var mm = {"event":"chat", "text": text, "username": document.getElementById('nicknameField').value, "utc": Math.floor(Date.now() / 1000)};
           sendEvent(mm);
           addOutgoingMessage(escapeHTML(mm.text));
       }

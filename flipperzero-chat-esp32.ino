@@ -25,15 +25,14 @@
 #include <WiFiUdp.h>
 #include <ESPmDNS.h>
 #include <WebServer.h>
-#include <WiFiClientSecure.h>
 #include <WebSocketsServer.h>
-#include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <FFat.h>
 #include "./DNSServer.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include "TimeLib.h"
 
 #define OLED_RESET -1
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -48,6 +47,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define PIX_ROW_4 56
 
 #define MAX_MEMBERS 40
+#define HISTORY_SIZE 15
 #define SS_PIN    5
 float frequency = 433.92;
 
@@ -56,6 +56,9 @@ WebSocketsServer webSocketServer(81);
 WebServer httpServer(80);
 IPAddress apIP(10, 10, 10, 1);
 DNSServer dnsServer;
+
+String history[HISTORY_SIZE];
+int historyPosition = 0;
 
 String members[MAX_MEMBERS];
 String member_sources[MAX_MEMBERS];
@@ -67,6 +70,7 @@ boolean mdns_started = false;
 boolean apMode = true;
 boolean captiveDNS = false;
 boolean displayInit = false;
+boolean replayChatHistory = true;
 
 int maxFlippers = 0;
 long radioRxCount = 0;
@@ -145,6 +149,37 @@ void streamToRadio(String &outData)
   }
 }
 
+void saveHistory(String &jsonData)
+{
+  if (replayChatHistory)
+  {
+    history[historyPosition] = jsonData;
+    historyPosition++;
+    if (historyPosition >= HISTORY_SIZE)
+      historyPosition = 0;
+  }
+}
+
+void replayHistory(int wsnum)
+{
+  if (replayChatHistory)
+  {
+    int t = historyPosition;
+    for(int i = 0; i < HISTORY_SIZE; i++)
+    {
+      if (!history[t].equals(""))
+      {
+        webSocketServer.sendTXT(wsnum, history[t]);
+      }
+      t++;
+      if (t >= HISTORY_SIZE)
+      {
+        t = 0;
+      }
+    }
+  }
+}
+
 void processJSONPayload(int num, uint8_t * payload)
 {
   boolean doRestart = false;
@@ -193,12 +228,22 @@ void processJSONPayload(int num, uint8_t * payload)
       }
       root["source"] = source;
       root["num"] = num;
+      if (!root.containsKey("utc"))
+      {
+        root["utc"] = now();
+      }
       String out;
       serializeJson(root, out);
       for(int i = 0; i < webSocketServer.connectedClients(); i++)
       {
         if (i != num)
           webSocketServer.sendTXT(i, out);
+      }
+      saveHistory(out);
+      if (timeStatus() != timeSet && root.containsKey("utc"))
+      {
+        time_t utc = root["utc"].as<time_t>();
+        setTime(utc);
       }
     }
     if (doRestart)
@@ -329,6 +374,10 @@ void setup()
     member_sources[i] = "";
     member_rssi[i] = 0;
   }
+  for(int i = 0; i < HISTORY_SIZE; i++)
+  {
+    history[i] = "";
+  }
   clearRadioBuffer();
   Serial.begin(115200);
   Serial.println("INIT");
@@ -438,10 +487,12 @@ void readChatFromRadioBuffer()
   jsonBuffer["text"] = text;
   jsonBuffer["event"] = "chat";
   jsonBuffer["rssi"] = radioRssi;
+  jsonBuffer["utc"] = now();
   jsonBuffer["source"] = source;
   serializeJson(jsonBuffer, out);
   webSocketServer.broadcastTXT(out);
   flashMessage(username,text);
+  saveHistory(out);
 }
 
 void checkRadio()
@@ -644,6 +695,7 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
         String out;
         serializeJson(jsonBuffer, out);
         webSocketServer.sendTXT(num, out);
+        replayHistory(num);
       }
       break;
     case WStype_TEXT:
@@ -710,6 +762,10 @@ void loadSettings()
     if (settings.containsKey("captiveDNS"))
     {
       captiveDNS = settings["captiveDNS"].as<bool>();
+    }
+    if (settings.containsKey("replayChatHistory"))
+    {
+      replayChatHistory = settings["replayChatHistory"].as<bool>();
     }
     if (apMode)
     {
