@@ -46,12 +46,21 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define PIX_ROW_3 40
 #define PIX_ROW_4 56
 
+#define MAX_IRC_CLIENTS 5
 #define MAX_MEMBERS 40
 #define HISTORY_SIZE 15
 #define SS_PIN    5
 float frequency = 433.92;
 
 WiFiMulti wifiMulti;
+WiFiServer ircServer(6667);
+WiFiClient ircClients[MAX_IRC_CLIENTS];
+char ircBuffers[MAX_IRC_CLIENTS][1024];
+int ircBufferPos[MAX_IRC_CLIENTS];
+int ircUserId[MAX_IRC_CLIENTS];
+String ircUsernames[MAX_IRC_CLIENTS];
+String ircNicknames[MAX_IRC_CLIENTS];
+
 WebSocketsServer webSocketServer(81);
 WebServer httpServer(80);
 IPAddress apIP(10, 10, 10, 1);
@@ -184,7 +193,7 @@ void processJSONPayload(int num, uint8_t * payload)
 {
   boolean doRestart = false;
   IPAddress ip = webSocketServer.remoteIP(num);
-  String source = ip.toString();
+  String source = "ws_" + ip.toString();
   char* data = (char *) payload;
   DynamicJsonDocument root(2048);
   DeserializationError error = deserializeJson(root, data);
@@ -208,6 +217,7 @@ void processJSONPayload(int num, uint8_t * payload)
         String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
         streamToRadio(xmitData);
         flashMessage(username, text);
+        lobbyPrivmsg(username,text);
       } else if (root.containsKey("event")) {
         if (event.equals("join"))
         {
@@ -268,7 +278,20 @@ bool isCleanUsername(String &username)
   return true;
 }
 
-void registerUser(int wsNum, String &username, String &source, int rssi)
+int userCount()
+{
+  int mc = 0;
+  for(int i = 0; i < MAX_MEMBERS; i++)
+  {
+    if (members[i] != "")
+    {
+      mc++;
+    }
+  }
+  return mc;
+}
+
+int registerUser(int wsNum, String &username, String &source, int rssi)
 {
   if (isCleanUsername(username))
   {
@@ -297,10 +320,13 @@ void registerUser(int wsNum, String &username, String &source, int rssi)
           String xmitData = "\x1B[0;92m" + username + " joined chat.\x1B[0m\r\n";
           streamToRadio(xmitData);
         }
-        return;
+        String ircJoin = ":" + username + "!~" + username + "@" + source + " JOIN :#lobby";
+        broadcastIrc(ircJoin);
+        return i;
       }
     }
   }
+  return -1;
 }
 
 void deleteUsersForNum(int wsNum)
@@ -309,7 +335,8 @@ void deleteUsersForNum(int wsNum)
   {
     for(int i = 0; i < MAX_MEMBERS; i++)
     {
-      if (member_nums[i] == wsNum && !members[i].equals(""))
+      if (member_nums[i] == wsNum && !members[i].equals("") 
+          && member_sources[i].startsWith("ws"))
       {
         deleteUser(i);
       }
@@ -358,6 +385,8 @@ void deleteUser(int idx)
     String xmitData = "\x1B[0;90m" + members[idx] + " left chat.\x1B[0m\r\n";
     streamToRadio(xmitData);
   }
+  String ircPart = ":" + members[idx] + " PART #lobby";
+  broadcastIrc(ircPart);
   members[idx] = "";
   member_nums[idx] = -1;
   member_sources[idx] = "";
@@ -377,6 +406,14 @@ void setup()
   {
     history[i] = "";
   }
+  for(int i = 0; i < MAX_IRC_CLIENTS; i++)
+  {
+    ircBufferPos[i] = 0;
+    ircBuffers[i][0] = 0;
+    ircUserId[i] = -1;
+    ircUsernames[i] = "";
+    ircNicknames[i] = "";
+  }
   clearRadioBuffer();
   Serial.begin(115200);
   Serial.println("INIT");
@@ -393,7 +430,8 @@ void setup()
   httpServer.on("/", handleRoot);
   httpServer.onNotFound(handleNotFound);
   httpServer.begin();
-
+  ircServer.begin();
+  ircServer.setNoDelay(true);
   if (display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
   {
     Serial.println("Display INIT OK");
@@ -491,6 +529,7 @@ void readChatFromRadioBuffer()
   serializeJson(jsonBuffer, out);
   webSocketServer.broadcastTXT(out);
   flashMessage(username,text);
+  lobbyPrivmsg(username,text);
   saveHistory(out);
 }
 
@@ -591,10 +630,249 @@ void redraw()
   }
 }
 
+void clearIrcBuffer(int num)
+{
+  ircBufferPos[num] = 0;
+  for(int n = 0; n < 2048; n++)
+  {
+    ircBuffers[num][n] = '\0';
+  }
+}
+
+void sendIrcServerResponse(int num, String code, String data)
+{
+  int uid = ircUserId[num];
+  String output = ":FlipperZeroChat.local " + code + " " + ircNicknames[num] + " " + data + "\r\n";
+  //Serial.print("IRC RESP: ");
+  //Serial.print(output);
+  ircClients[num].print(output);
+}
+
+void ircGreet(int num)
+{
+  sendIrcServerResponse(num, "001", ":Welcome to the Internet Relay Chat Network");
+  sendIrcServerResponse(num, "002", ":Your host is " + line4 + ", running FlipperZero SubGhz Chat Relay");
+  sendIrcServerResponse(num, "003", ":This server was created on unknown");
+  sendIrcServerResponse(num, "004", "FlipperZeroChat.local SubGhzChat * *");
+  sendIrcServerResponse(num, "005", "RFC2812 IRCD=FZSubGhzChat CHARSET=UTF-8 CASEMAPPING=ascii PREFIX=(qaohv)~&@%+ CHANTYPES=# CHANMODES=beI,k,l,imMnOPQRstVz CHANLIMIT=#&+:10 :are supported on this server");
+  sendIrcServerResponse(num, "005", "CHANNELLEN=50 NICKLEN=20 TOPICLEN=490 AWAYLEN=127 KICKLEN=400 MODES=5 MAXLIST=beI:50 EXCEPTS=e INVEX=I PENALTY FNC :are supported on this server");
+  sendIrcServerResponse(num, "251", ":There are " + String(userCount()) + " users on 1 server");
+  sendIrcServerResponse(num, "252", "0 :0 IRC Operators online");
+  sendIrcServerResponse(num, "254", "1 :1 channels formed");
+  sendIrcServerResponse(num, "375", ":- " + line4 + " Message of the day -");
+  sendIrcServerResponse(num, "376", ":End of MOTD command");
+}
+
+void handleIrcCommand(int num)
+{
+  String line = String(ircBuffers[num]);
+  if (line.equals(""))  return;
+  //Serial.print("IRC IN: ");
+  //Serial.println(line);
+  if (line.startsWith("USER"))
+  {
+    String userLine = line.substring(5, line.length());
+    ircUsernames[num] = userLine.substring(0, userLine.indexOf(' '));
+    if (!ircUsernames[num].equals("") && !ircNicknames[num].equals(""))
+    {
+      ircGreet(num);
+    }
+  } else if (line.startsWith("NICK")) {
+    ircClients[num].println(line);
+    String nickname = line.substring(5, line.length());
+    ircNicknames[num] = nickname;
+    if (!ircUsernames[num].equals("") && !ircNicknames[num].equals(""))
+    {
+      ircGreet(num);
+    }
+    ircClients[num].print(":TheReaper INVITE " + nickname + " #lobby\r\n");
+  } else if (line.startsWith("PRIVMSG #lobby ")) {
+    String text = line.substring(16, line.length());
+    int uid = ircUserId[num];
+    String username = members[uid];
+    String out;
+    StaticJsonDocument<3072> jsonBuffer;
+    jsonBuffer["username"] = username;
+    jsonBuffer["text"] = text;
+    jsonBuffer["event"] = "chat";
+    jsonBuffer["rssi"] = WiFi.RSSI();
+    jsonBuffer["utc"] = now();
+    jsonBuffer["source"] = member_sources[uid];
+    serializeJson(jsonBuffer, out);
+    webSocketServer.broadcastTXT(out);
+    flashMessage(username, text);
+    lobbyPrivmsg(username, text);
+    String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
+    streamToRadio(xmitData);
+  } else if (line.startsWith("JOIN #lobby")) {
+    String nickname = ircNicknames[num];
+    String username = ircUsernames[num];
+    if (ircUserId[num] == -1)
+    {
+      // user is not registered!
+      String rmip = ircClients[num].remoteIP().toString();
+      String source = "irc_" + rmip;
+      ircUserId[num] = registerUser(num, username, source, WiFi.RSSI());
+    }
+    String ircJoin = ":" + nickname + "!~" + username + "@* JOIN :#lobby\r\n";
+    ircClients[num].print(ircJoin);
+    sendIrcServerResponse(num, "331", "#lobby :No topic is set");
+    String namesList = "= #lobby :";
+    for(int i = 0; i < MAX_MEMBERS; i++)
+    {
+      if (members[i] != "")
+      {
+        namesList += members[i] + " ";
+      }
+    }
+    namesList += "@TheReaper";
+    sendIrcServerResponse(num, "353", namesList);
+    sendIrcServerResponse(num, "366", "#lobby :End of NAMES List");
+  } else if (line.startsWith("PART #lobby")) {
+    String nickname = ircNicknames[num];
+    String username = ircUsernames[num];
+    deleteUser(nickname);
+    ircUserId[num] = -1;
+  } else if (line.startsWith("WHO #lobby")) {
+    for(int i = 0; i < MAX_MEMBERS; i++)
+    {
+      if (members[i] != "")
+      {
+        String whoResp = "#lobby " + members[i] + " " + member_sources[i] + " " + line4 + " " + members[i] + " H :0 " + members[i];
+        sendIrcServerResponse(num, "352", whoResp);
+      }
+    }
+    sendIrcServerResponse(num, "315", "#lobby :End of WHO List");
+  } else if (line.startsWith("PING")) {
+    String out = "PONG " + line.substring(5, line.length()) + "\r\n";
+    ircClients[num].print(out);
+  } else {
+    String command = line.substring(0, line.indexOf(' '));
+    if (command.equals("PRIVMSG") || command.equals("AWAY"))
+    {
+
+    } else if (command.equals("QUIT")) {
+      int uid = ircUserId[num];
+      ircUserId[num] = -1;
+      ircUsernames[num] = "";
+      ircNicknames[num] = "";
+      ircBufferPos[num] = 0;
+      ircBuffers[num][0] = '\0';
+      if (uid >= 0)
+        deleteUser(uid);
+      ircClients[num].stop();
+    } else {
+      sendIrcServerResponse(num, "421", command + " :Unknown Command");
+    }
+  }
+}
+
+void appendToIrcBuffer(int num, char c)
+{
+  if (ircBufferPos[num] < 2047)
+  {
+    if (c == '\r' || c == '\n')
+    {
+      handleIrcCommand(num);
+      clearIrcBuffer(num);
+    } else {
+      ircBuffers[num][ircBufferPos[num]] = c;
+      ircBufferPos[num]++;
+      ircBuffers[num][ircBufferPos[num]] = '\0';
+    }
+  } else {
+    clearIrcBuffer(num);
+  }
+}
+
+
+void loopIrc()
+{
+  for (int i = 0; i < MAX_IRC_CLIENTS; i++)
+  {
+    // check for disconnections
+    if (!ircClients[i] && (!ircUsernames[i].equals("") || !ircNicknames[i].equals("")))
+    {
+      int uid = ircUserId[i];
+      ircUserId[i] = -1;
+      ircUsernames[i] = "";
+      ircNicknames[i] = "";
+      ircBufferPos[i] = 0;
+      ircBuffers[i][0] = '\0';
+      if (uid >= 0)
+        deleteUser(uid);
+    }
+  }
+  if (ircServer.hasClient())
+  {
+    int i;
+    for (i = 0; i < MAX_IRC_CLIENTS; i++)
+    {
+      if (!ircClients[i]) // equivalent to !serverClients[i].connected()
+      {
+        ircClients[i] = ircServer.available();
+        Serial.print("New IRC client: ");
+        Serial.println(ircClients[i].remoteIP());
+        break;
+      }
+    }
+
+    //no free/disconnected spot so reject
+    if (i == MAX_IRC_CLIENTS) 
+    {
+      ircServer.available().println("busy");
+    }
+  }
+  for (int i = 0; i < MAX_IRC_CLIENTS; i++)
+  {
+    while (ircClients[i].available())
+    {
+      char c = ircClients[i].read();
+      appendToIrcBuffer(i, c);
+    }
+  }
+}
+
+void lobbyPrivmsg(String &username, String &text)
+{
+  String line = ":" + username + " PRIVMSG #lobby :" + text;
+  broadcastIrcExcept(username, line);
+}
+
+void broadcastIrcExcept(String &username, String &line)
+{
+  //Serial.print("IRC OUT: ");
+  //Serial.println(line);
+  int uid = findUser(username);
+  for (int i = 0; i < MAX_IRC_CLIENTS; i++)
+  {
+    if (ircClients[i] && ircUserId[i] >= 0 && ircUserId[i] != uid)
+    {
+      ircClients[i].print(line);
+      ircClients[i].print("\r\n");
+    }
+  }
+}
+
+void broadcastIrc(String &line)
+{
+  //Serial.print("IRC OUT ALL: ");
+  //Serial.println(line);
+  for (int i = 0; i < MAX_IRC_CLIENTS; i++)
+  {
+    if (ircClients[i] && ircUserId[i] >= 0)
+    {
+      ircClients[i].print(line);
+      ircClients[i].print("\r\n");
+    }
+  }
+}
+
 void loopNetwork()
 {
   webSocketServer.loop();
   httpServer.handleClient();
+  loopIrc();
 }
 
 void everySecond()

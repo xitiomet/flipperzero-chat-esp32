@@ -97,6 +97,16 @@ At any point while in the chat screen a connected user may type "/freq 433.92" t
 
 If the gateway starts malfunctioning any web user can type "/restart" to reboot it remotely.
 
+### Connecting with an IRC Client
+
+So I decided to add support for IRC clients. Letting users bring their favorite chat interface to this project.
+
+Ive Tested:
+ * irssi
+ * pidgin
+
+once you connect simply "/join #lobby"
+
 ### Websocket protocol
 
 If you would like to make your own client to interface with this device the protocol is pretty simple. port 81 is a websocket server all messages are single line json objects.

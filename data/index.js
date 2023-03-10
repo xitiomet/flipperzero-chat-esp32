@@ -32,6 +32,15 @@ function getCookie(cname)
   return null;
 }
 
+function avatarFromSource(source)
+{
+    if (source == "flipper")
+      return "flipper.png";
+    else if (source.startsWith("irc"))
+      return "irc.png";
+    else
+      return "spy.png";
+}
 
 function sendEvent(wsEvent)
 {
@@ -46,7 +55,12 @@ function sendEvent(wsEvent)
     }
 }
 
-function updateUserNick(username, details, picture = "flipper.png")
+function cleanDetails(details)
+{
+    return details.replace('_', ' ').toUpperCase();
+}
+
+function updateUserNick(username, details, picture = "spy.png")
 {
     if (document.getElementById("nicknameField").value != username)
     {
@@ -60,7 +74,7 @@ function updateUserNick(username, details, picture = "flipper.png")
                                       "<img id=\"avatar_" + id + "\" src=\"" + picture + "\"> </div>" +
                                         "<div class=\"chat_ib\" style=\"padding-top: 0px;\">" +
                                         "<div style=\"font-size: 18px;\" id=\"nick_" + id + "\">" + username + "</div>" +
-                                        "<span style=\"font-size: 10px;\" id=\"details_" + id + "\">" + details + "</span>" +
+                                        "<span style=\"font-size: 10px;\" id=\"details_" + id + "\">" + cleanDetails(details) + "</span>" +
                                         "</div></div>";
             document.getElementById('user_list').appendChild(chat_list_div);
         } else {
@@ -72,7 +86,7 @@ function updateUserNick(username, details, picture = "flipper.png")
             var trow2 = document.getElementById("details_" + id);
             if (trow2 != undefined)
             {
-                trow2.innerHTML = details;
+                trow2.innerHTML = cleanDetails(details);
             }
             var avatar = document.getElementById("avatar_" + id);
             if (avatar != undefined)
@@ -108,7 +122,7 @@ function addOutgoingMessage(text)
 
 }
 
-function addIncomingMessage(username, text, picture = "flipper.png", timestamp = null)
+function addIncomingMessage(username, text, picture = "spy.png", timestamp = null)
 {
     var d = new Date();
     if (timestamp != null)
@@ -166,13 +180,11 @@ function setupWebsocket()
                 for (var i = 0; i < usersList.length; i++) 
                 {
                     var user = usersList[i];
-                    if (user.s == 'flipper')
+                    if (user.s == 'flipper' || user.s == 'radio')
                     {
-                        updateUserNick(user.u, "RSSI " + user.r, "flipper.png");
-                    } else if (user.s == 'radio') {
-                        updateUserNick(user.u, "RSSI " + user.r, "spy.png");
+                        updateUserNick(user.u, "RSSI " + user.r, avatarFromSource(user.s));
                     } else {
-                        updateUserNick(user.u, user.s, "spy.png");
+                        updateUserNick(user.u, user.s, avatarFromSource(user.s));
                     }
                 }
             }
@@ -185,15 +197,12 @@ function setupWebsocket()
                         var picture = "spy.png";
                         if (jsonObject.hasOwnProperty('source'))
                         {
-                            if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "flipper")
+                            picture = avatarFromSource(jsonObject.source);
+                            if (jsonObject.hasOwnProperty('rssi') && (jsonObject.source == 'flipper' || jsonObject.source == 'radio'))
                             {
-                                picture = "flipper.png";
-                                updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "flipper.png");
-                            } else if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "radio") {
-                                picture = "spy.png";
-                                updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "spy.png");
+                                updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, picture);
                             } else {
-                                updateUserNick(jsonObject.username, jsonObject.source, "spy.png");
+                                updateUserNick(jsonObject.username, jsonObject.source, picture);
                             }
                         }
                         var timestamp = null;
@@ -206,13 +215,11 @@ function setupWebsocket()
                 } else if (event == 'join') {
                     if (jsonObject.hasOwnProperty('source'))
                     {
-                        if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "flipper")
+                        if (jsonObject.hasOwnProperty('rssi') && (jsonObject.source == 'flipper' || jsonObject.source == 'radio'))
                         {
-                            updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "flipper.png");
-                        } else if (jsonObject.hasOwnProperty('rssi') && jsonObject.source == "radio") {
-                            updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, "spy.png");
+                            updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, avatarFromSource(jsonObject.source));
                         } else {
-                            updateUserNick(jsonObject.username, jsonObject.source, "spy.png");
+                            updateUserNick(jsonObject.username, jsonObject.source, avatarFromSource(jsonObject.source));
                         }
                     }
                 } else if (event == 'part') {
