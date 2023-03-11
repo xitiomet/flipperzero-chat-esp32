@@ -73,6 +73,7 @@ String members[MAX_MEMBERS];
 String member_sources[MAX_MEMBERS];
 int member_nums[MAX_MEMBERS];
 int member_rssi[MAX_MEMBERS];
+long member_last_active[MAX_MEMBERS];
 
 uint8_t wl_status;
 boolean mdns_started = false;
@@ -189,6 +190,13 @@ void replayHistory(int wsnum)
   }
 }
 
+void changeFrequency(float frq)
+{
+  frequency = frq;
+  ELECHOUSE_cc1101.setMHZ(frequency);
+  broadcastIrc(":TheReaper TOPIC #lobby :" + String(frequency) + " Mhz");
+}
+
 void processJSONPayload(int num, uint8_t * payload)
 {
   boolean doRestart = false;
@@ -225,8 +233,7 @@ void processJSONPayload(int num, uint8_t * payload)
         } else if (event.equals("part")) {
           deleteUser(username);
         } if (event.equals("frequency")) {
-          frequency = root["mhz"].as<float>();
-          ELECHOUSE_cc1101.setMHZ(frequency);
+          changeFrequency(root["mhz"].as<float>());
         } else if (event.equals("raw")) {
           String data = root["data"].as<String>();
           streamToRadio(data);
@@ -307,6 +314,7 @@ int registerUser(int wsNum, String &username, String &source, int rssi)
         member_nums[i] = wsNum;
         member_sources[i] = source;
         member_rssi[i] = rssi;
+        member_last_active[i] = millis();
         String out;
         StaticJsonDocument<1024> jsonBuffer;
         jsonBuffer["username"] = members[i];
@@ -391,6 +399,7 @@ void deleteUser(int idx)
   member_nums[idx] = -1;
   member_sources[idx] = "";
   member_rssi[idx] = 0;
+  member_last_active[idx] = -1;
 }
 
 void setup()
@@ -401,6 +410,7 @@ void setup()
     member_nums[i] = -1;
     member_sources[i] = "";
     member_rssi[i] = 0;
+    member_last_active[i] = -1;
   }
   for(int i = 0; i < HISTORY_SIZE; i++)
   {
@@ -508,9 +518,14 @@ void readChatFromRadioBuffer()
   {
     source = "flipper";
   }
-  if (findUser(username) == -1)
+  int uid = findUser(username);
+  if (uid == -1)
   {
-    registerUser(-1, username, source, radioRssi);
+    uid = registerUser(-1, username, source, radioRssi);
+  }
+  if (uid >= 0 and uid < MAX_MEMBERS)
+  {
+    member_last_active[uid] = millis();
   }
   Serial.print("(");
   Serial.print(source);
@@ -642,7 +657,7 @@ void clearIrcBuffer(int num)
 void sendIrcServerResponse(int num, String code, String data)
 {
   int uid = ircUserId[num];
-  String output = ":FlipperZeroChat.local " + code + " " + ircNicknames[num] + " " + data + "\r\n";
+  String output = ":FlipperZeroChat " + code + " " + ircNicknames[num] + " " + data + "\r\n";
   //Serial.print("IRC RESP: ");
   //Serial.print(output);
   ircClients[num].print(output);
@@ -653,7 +668,7 @@ void ircGreet(int num)
   sendIrcServerResponse(num, "001", ":Welcome to the Internet Relay Chat Network");
   sendIrcServerResponse(num, "002", ":Your host is " + line4 + ", running FlipperZero SubGhz Chat Relay");
   sendIrcServerResponse(num, "003", ":This server was created on unknown");
-  sendIrcServerResponse(num, "004", "FlipperZeroChat.local SubGhzChat * *");
+  sendIrcServerResponse(num, "004", "FlipperZeroChat SubGhzChat * *");
   sendIrcServerResponse(num, "005", "RFC2812 IRCD=FZSubGhzChat CHARSET=UTF-8 CASEMAPPING=ascii PREFIX=(qaohv)~&@%+ CHANTYPES=# CHANMODES=beI,k,l,imMnOPQRstVz CHANLIMIT=#&+:10 :are supported on this server");
   sendIrcServerResponse(num, "005", "CHANNELLEN=50 NICKLEN=20 TOPICLEN=490 AWAYLEN=127 KICKLEN=400 MODES=5 MAXLIST=beI:50 EXCEPTS=e INVEX=I PENALTY FNC :are supported on this server");
   sendIrcServerResponse(num, "251", ":There are " + String(userCount()) + " users on 1 server");
@@ -669,7 +684,7 @@ void handleIrcCommand(int num)
   if (line.equals(""))  return;
   //Serial.print("IRC IN: ");
   //Serial.println(line);
-  if (line.startsWith("USER"))
+  if (line.startsWith("USER "))
   {
     String userLine = line.substring(5, line.length());
     ircUsernames[num] = userLine.substring(0, userLine.indexOf(' '));
@@ -677,7 +692,7 @@ void handleIrcCommand(int num)
     {
       ircGreet(num);
     }
-  } else if (line.startsWith("NICK")) {
+  } else if (line.startsWith("NICK ")) {
     ircClients[num].println(line);
     String nickname = line.substring(5, line.length());
     ircNicknames[num] = nickname;
@@ -717,7 +732,7 @@ void handleIrcCommand(int num)
     }
     String ircJoin = ":" + nickname + "!~" + username + "@* JOIN :#lobby\r\n";
     ircClients[num].print(ircJoin);
-    sendIrcServerResponse(num, "331", "#lobby :No topic is set");
+    sendIrcServerResponse(num, "332", "#lobby :" + String(frequency) + " Mhz");
     String namesList = "= #lobby :";
     for(int i = 0; i < MAX_MEMBERS; i++)
     {
@@ -906,6 +921,16 @@ void everySecond()
         flipperCount++;
       } else {
         networkCount++;
+      }
+      if ((member_sources[i].equals("flipper") || member_sources[i].equals("radio")) && member_last_active[i] >= 0)
+      {
+        long idle = millis() - member_last_active[i];
+        //Serial.println(members[i] + " IDLE: " + String(idle));
+        // Lets get rid of radio users that have been quiet for over an hour
+        if (idle > 3600000)
+        {
+          deleteUser(i);
+        }
       }
     }
   }

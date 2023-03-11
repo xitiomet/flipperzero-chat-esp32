@@ -101,11 +101,18 @@ If the gateway starts malfunctioning any web user can type "/restart" to reboot 
 
 So I decided to add support for IRC clients. Letting users bring their favorite chat interface to this project.
 
-Ive Tested:
+I've Tested the following clients:
  * irssi
  * pidgin
+ * mIRC
 
 once you connect simply "/join #lobby"
+
+Things that don't work since this isn't a real IRC server:
+ * private messages
+ * away messages
+ * topic changes
+ * kicks/bans/ignores
 
 ### Websocket protocol
 
