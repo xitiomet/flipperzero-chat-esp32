@@ -194,9 +194,9 @@ function setupWebsocket()
                     var user = usersList[i];
                     if (user.s == 'flipper' || user.s == 'radio')
                     {
-                        updateUserNick(user.u, "RSSI " + user.r, avatarFromSource(user.s));
+                        addUserEntry(user.u, "RSSI " + user.r, avatarFromSource(user.s));
                     } else {
-                        updateUserNick(user.u, user.s, avatarFromSource(user.s));
+                        addUserEntry(user.u, user.s, avatarFromSource(user.s));
                     }
                 }
             }
