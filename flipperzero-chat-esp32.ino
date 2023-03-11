@@ -213,7 +213,7 @@ void processJSONPayload(int num, uint8_t * payload)
     {
       String username = root["username"].as<String>();
       String event = root["event"].as<String>();
-      if (root.containsKey("text"))
+      if (root.containsKey("text") && event.equals("chat"))
       {
         String text = root["text"].as<String>();
         Serial.print("(");
@@ -226,7 +226,7 @@ void processJSONPayload(int num, uint8_t * payload)
         streamToRadio(xmitData);
         flashMessage(username, text);
         lobbyPrivmsg(username,text);
-      } else if (root.containsKey("event")) {
+      } else {
         if (event.equals("join"))
         {
           registerUser(num, username, source, WiFi.RSSI());
@@ -256,7 +256,10 @@ void processJSONPayload(int num, uint8_t * payload)
         if (i != num)
           webSocketServer.sendTXT(i, out);
       }
-      saveHistory(out);
+      if (event.equals("chat"))
+      {
+        saveHistory(out);
+      }
       if (timeStatus() != timeSet && root.containsKey("utc"))
       {
         time_t utc = root["utc"].as<time_t>();
@@ -704,22 +707,26 @@ void handleIrcCommand(int num)
   } else if (line.startsWith("PRIVMSG #lobby ")) {
     String text = line.substring(16, line.length());
     int uid = ircUserId[num];
-    String username = members[uid];
-    String out;
-    StaticJsonDocument<3072> jsonBuffer;
-    jsonBuffer["username"] = username;
-    jsonBuffer["text"] = text;
-    jsonBuffer["event"] = "chat";
-    jsonBuffer["rssi"] = WiFi.RSSI();
-    jsonBuffer["utc"] = now();
-    jsonBuffer["source"] = member_sources[uid];
-    serializeJson(jsonBuffer, out);
-    webSocketServer.broadcastTXT(out);
-    flashMessage(username, text);
-    lobbyPrivmsg(username, text);
-    String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
-    streamToRadio(xmitData);
-    saveHistory(out);
+    if (uid >= 0)
+    {
+      member_last_active[uid] = millis();
+      String username = members[uid];
+      String out;
+      StaticJsonDocument<3072> jsonBuffer;
+      jsonBuffer["username"] = username;
+      jsonBuffer["text"] = text;
+      jsonBuffer["event"] = "chat";
+      jsonBuffer["rssi"] = WiFi.RSSI();
+      jsonBuffer["utc"] = now();
+      jsonBuffer["source"] = member_sources[uid];
+      serializeJson(jsonBuffer, out);
+      webSocketServer.broadcastTXT(out);
+      flashMessage(username, text);
+      lobbyPrivmsg(username, text);
+      String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
+      streamToRadio(xmitData);
+      saveHistory(out);
+    }
   } else if (line.startsWith("JOIN #lobby")) {
     String nickname = ircNicknames[num];
     String username = ircUsernames[num];
@@ -762,6 +769,11 @@ void handleIrcCommand(int num)
   } else if (line.startsWith("PING")) {
     String out = "PONG " + line.substring(5, line.length()) + "\r\n";
     ircClients[num].print(out);
+    int uid = ircUserId[num];
+    if (uid >= 0)
+    {
+      member_last_active[uid] = millis();
+    }
   } else {
     String command = line.substring(0, line.indexOf(' '));
     if (command.equals("PRIVMSG") || command.equals("AWAY"))

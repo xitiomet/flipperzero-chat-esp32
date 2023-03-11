@@ -60,7 +60,7 @@ function cleanDetails(details)
     return details.replace('_', ' ').toUpperCase();
 }
 
-function updateUserNick(username, details, picture = "spy.png")
+function addUserEntry(username, details, picture = "spy.png")
 {
     if (document.getElementById("nicknameField").value != username)
     {
@@ -77,6 +77,18 @@ function updateUserNick(username, details, picture = "spy.png")
                                         "<span style=\"font-size: 10px;\" id=\"details_" + id + "\">" + cleanDetails(details) + "</span>" +
                                         "</div></div>";
             document.getElementById('user_list').appendChild(chat_list_div);
+        }
+    }
+}
+
+function updateUserNick(username, details, picture = "spy.png")
+{
+    if (document.getElementById("nicknameField").value != username)
+    {
+        var id = "user_" + username;
+        if (document.getElementById(id) == undefined)
+        {
+            console.log("couldnt find element: " + id);
         } else {
             var trow = document.getElementById("nick_" + id);
             if (trow != undefined)
@@ -217,9 +229,9 @@ function setupWebsocket()
                     {
                         if (jsonObject.hasOwnProperty('rssi') && (jsonObject.source == 'flipper' || jsonObject.source == 'radio'))
                         {
-                            updateUserNick(jsonObject.username, "RSSI " + jsonObject.rssi, avatarFromSource(jsonObject.source));
+                            addUserEntry(jsonObject.username, "RSSI " + jsonObject.rssi, avatarFromSource(jsonObject.source));
                         } else {
-                            updateUserNick(jsonObject.username, jsonObject.source, avatarFromSource(jsonObject.source));
+                            addUserEntry(jsonObject.username, jsonObject.source, avatarFromSource(jsonObject.source));
                         }
                     }
                 } else if (event == 'part') {
