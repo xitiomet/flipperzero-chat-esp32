@@ -704,6 +704,7 @@ void handleIrcCommand(int num)
     lobbyPrivmsg(username, text);
     String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
     streamToRadio(xmitData);
+    saveHistory(out);
   } else if (line.startsWith("JOIN #lobby")) {
     String nickname = ircNicknames[num];
     String username = ircUsernames[num];
