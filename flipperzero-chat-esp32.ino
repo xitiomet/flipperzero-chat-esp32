@@ -675,10 +675,18 @@ void ircGreet(int num)
   sendIrcServerResponse(num, "005", "RFC2812 IRCD=FZSubGhzChat CHARSET=UTF-8 CASEMAPPING=ascii PREFIX=(qaohv)~&@%+ CHANTYPES=# CHANMODES=beI,k,l,imMnOPQRstVz CHANLIMIT=#&+:10 :are supported on this server");
   sendIrcServerResponse(num, "005", "CHANNELLEN=50 NICKLEN=20 TOPICLEN=490 AWAYLEN=127 KICKLEN=400 MODES=5 MAXLIST=beI:50 EXCEPTS=e INVEX=I PENALTY FNC :are supported on this server");
   sendIrcServerResponse(num, "251", ":There are " + String(userCount()) + " users on 1 server");
-  sendIrcServerResponse(num, "252", "0 :0 IRC Operators online");
-  sendIrcServerResponse(num, "254", "1 :1 channels formed");
+  sendIrcServerResponse(num, "252", "1 :IRC Operators online");
+  sendIrcServerResponse(num, "254", "1 :channels formed");
   sendIrcServerResponse(num, "375", ":- " + line4 + " Message of the day -");
+  sendIrcServerResponse(num, "372", ":-    _____       __    ________             ________          __  ");
+  sendIrcServerResponse(num, "372", ":-   / ___/__  __/ /_  / ____/ /_  ____     / ____/ /_  ____ _/ /_ ");
+  sendIrcServerResponse(num, "372", ":-   \\__ \\/ / / / __ \\/ / __/ __ \\/_  /    / /   / __ \\/ __ `/ __/ ");
+  sendIrcServerResponse(num, "372", ":-  ___/ / /_/ / /_/ / /_/ / / / / / /_   / /___/ / / / /_/ / /_   ");
+  sendIrcServerResponse(num, "372", ":- /____/\\__,_/_.___/\\____/_/ /_/ /___/   \\____/_/ /_/\\__,_/\\__/   ");
+  sendIrcServerResponse(num, "372", ":-");
+  sendIrcServerResponse(num, "372", ":-       https://github.com/xitiomet/flipperzero-chat-esp32");
   sendIrcServerResponse(num, "376", ":End of MOTD command");
+  ircClients[num].print(":TheReaper INVITE " + ircNicknames[num] + " #lobby\r\n");
 }
 
 bool get_token(String &from, String &to, uint8_t index, char separator)
@@ -730,7 +738,6 @@ void handleIrcCommand(int num)
     {
       ircGreet(num);
     }
-    ircClients[num].print(":TheReaper INVITE " + nickname + " #lobby\r\n");
   } else if (line.startsWith("PRIVMSG #lobby ")) {
     String text = line.substring(16, line.length());
     text.trim();
