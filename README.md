@@ -109,7 +109,7 @@ I've Tested the following clients:
 once you connect simply "/join #lobby"
 
 Things that don't work since this isn't a real IRC server:
- * private messages
+ * private messages (except to other irc connections)
  * away messages
  * topic changes
  * kicks/bans/ignores

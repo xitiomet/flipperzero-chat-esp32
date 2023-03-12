@@ -224,6 +224,16 @@ function setupWebsocket()
                         }
                         addIncomingMessage(jsonObject.username, escapeHTML(jsonObject.text), picture, timestamp);
                     }
+                } else if (event == 'info') {
+                    if (jsonObject.hasOwnProperty('text'))
+                    {
+                        var timestamp = null;
+                        if (jsonObject.hasOwnProperty('utc'))
+                        {
+                            timestamp = jsonObject.utc;
+                        }
+                        addIncomingMessage("The Reaper",escapeHTML(jsonObject.text),"reaper.png", timestamp);
+                    }
                 } else if (event == 'join') {
                     if (jsonObject.hasOwnProperty('source'))
                     {

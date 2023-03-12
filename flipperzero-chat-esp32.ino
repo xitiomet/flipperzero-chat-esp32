@@ -681,6 +681,33 @@ void ircGreet(int num)
   sendIrcServerResponse(num, "376", ":End of MOTD command");
 }
 
+bool get_token(String &from, String &to, uint8_t index, char separator)
+{
+  uint16_t start = 0, idx = 0;
+  uint8_t cur = 0;
+  while (idx < from.length())
+  {
+    if (from.charAt(idx) == separator)
+    {
+      if (cur == index)
+      {
+        to = from.substring(start, idx);
+        return true;
+      }
+      cur++;
+      while ((idx < from.length() - 1) && (from.charAt(idx + 1) == separator)) idx++;
+      start = idx + 1;
+    }
+    idx++;
+  }
+  if ((cur == index) && (start < from.length()))
+  {
+    to = from.substring(start, from.length());
+    return true;
+  }
+  return false;
+}
+
 void handleIrcCommand(int num)
 {
   String line = String(ircBuffers[num]);
@@ -706,25 +733,44 @@ void handleIrcCommand(int num)
     ircClients[num].print(":TheReaper INVITE " + nickname + " #lobby\r\n");
   } else if (line.startsWith("PRIVMSG #lobby ")) {
     String text = line.substring(16, line.length());
+    text.trim();
+    //Serial.println("T:" + text);
     int uid = ircUserId[num];
     if (uid >= 0)
     {
-      member_last_active[uid] = millis();
+      bool isAction = false;
       String username = members[uid];
+      lobbyPrivmsg(username, text);
+      if (text.startsWith("\001ACTION"))
+      {
+        isAction = true;
+        text = username + " " + text.substring(8, text.length()-1);
+      }
+      member_last_active[uid] = millis();
       String out;
       StaticJsonDocument<3072> jsonBuffer;
       jsonBuffer["username"] = username;
       jsonBuffer["text"] = text;
-      jsonBuffer["event"] = "chat";
+      if (isAction)
+      {
+        jsonBuffer["event"] = "info";
+      } else {
+        jsonBuffer["event"] = "chat";
+      }
       jsonBuffer["rssi"] = WiFi.RSSI();
       jsonBuffer["utc"] = now();
       jsonBuffer["source"] = member_sources[uid];
       serializeJson(jsonBuffer, out);
       webSocketServer.broadcastTXT(out);
       flashMessage(username, text);
-      lobbyPrivmsg(username, text);
-      String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
-      streamToRadio(xmitData);
+      if (isAction)
+      {
+        String xmitData = "\x1B[0;94m" + username + " " + text + "\x1B[0m\r\n";
+        streamToRadio(xmitData);
+      } else {
+        String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
+        streamToRadio(xmitData);
+      }
       saveHistory(out);
     }
   } else if (line.startsWith("JOIN #lobby")) {
@@ -766,6 +812,23 @@ void handleIrcCommand(int num)
       }
     }
     sendIrcServerResponse(num, "315", "#lobby :End of WHO List");
+  } else if (line.startsWith("LIST ") || line.equals("LIST")) {
+    sendIrcServerResponse(num, "321", "Channel :Users  Name");
+    String listResp = "#lobby " + String(userCount()) + " :" + String(frequency) + " Mhz" ;
+    sendIrcServerResponse(num, "322", listResp);
+    sendIrcServerResponse(num, "323", ":End of List");
+  } else if (line.startsWith("NAMES")) {
+    String namesResp1 = "= #lobby :@TheReaper";
+    sendIrcServerResponse(num, "353", namesResp1);
+    for(int i = 0; i < MAX_MEMBERS; i++)
+    {
+      if (members[i] != "")
+      {
+        String namesResp = "= #lobby :" + members[i];
+        sendIrcServerResponse(num, "353", namesResp);
+      }
+    }
+    sendIrcServerResponse(num, "366", "#lobby :End of NAMES List");
   } else if (line.startsWith("PING")) {
     String out = "PONG " + line.substring(5, line.length()) + "\r\n";
     ircClients[num].print(out);
@@ -774,10 +837,86 @@ void handleIrcCommand(int num)
     {
       member_last_active[uid] = millis();
     }
-  } else {
-    String command = line.substring(0, line.indexOf(' '));
-    if (command.equals("PRIVMSG") || command.equals("AWAY"))
+  } else if (line.startsWith("ISON ")) {
+    String nicknames = line.substring(5, line.length());
+    nicknames.trim();
+    //Serial.println("ISON:" + nicknames);
+    String nickname = "";
+    uint8_t nick_idx = 0;
+    String respList = "";
+    while(get_token(nicknames, nickname, nick_idx, ' '))
     {
+      //Serial.println("check:" + nickname);
+      if (findUser(nickname) >= 0)
+      {
+        respList += nickname + " ";
+      }
+      nick_idx++;
+    }
+    respList.trim();
+    sendIrcServerResponse(num, "303", ":" + respList);
+  } else {
+    String command = line;
+    String arg1 = "";
+    String arg2 = "";
+    int firstSpace = line.indexOf(' ');
+    if (firstSpace >= 0)
+    {
+      command = line.substring(0, firstSpace);
+      String laterHalf = line.substring(firstSpace+1, line.length());
+      int secondSpace = laterHalf.indexOf(' ');
+      if (secondSpace >= 0)
+      {
+        arg1 = laterHalf.substring(0, secondSpace);
+        arg2 = laterHalf.substring(secondSpace+1, laterHalf.length());
+        //Serial.print("arg1:");
+        //Serial.println(arg1);
+        //Serial.print("arg2:");
+        //Serial.println(arg2);
+      } else {
+        arg1 = laterHalf;
+      }
+    }
+    if (command.equals("PRIVMSG"))
+    {
+      if (arg2.startsWith(":"))
+      {
+        arg2 = arg2.substring(1, arg2.length());
+      }
+      int findIrcId = findIrcNick(arg1);
+      if (findIrcId >= 0)
+      {
+        String line = ":" + ircNicknames[num] + " PRIVMSG " + ircNicknames[findIrcId] + " :" + arg2 + "\r\n";
+        ircClients[findIrcId].print(line);
+      } else {
+        int findUserId = findUser(arg1);
+        if (findUserId >= 0)
+        {
+          int wsNum = member_nums[findUserId];
+          int uid = ircUserId[num];
+          if (wsNum >= 0 && uid >=0)
+          {
+            String nickname = ircNicknames[num];
+            StaticJsonDocument<3072> jsonBuffer;
+            jsonBuffer["username"] = nickname;
+            jsonBuffer["text"] = arg2;
+            jsonBuffer["event"] = "private";
+            jsonBuffer["rssi"] = WiFi.RSSI();
+            jsonBuffer["utc"] = now();
+            jsonBuffer["source"] = member_sources[uid];
+            jsonBuffer["to"] = members[findUserId];
+            String out;
+            serializeJson(jsonBuffer, out);
+            //Serial.println(out);
+            webSocketServer.sendTXT(wsNum, out);
+          } else {
+            sendIrcServerResponse(num, "401", arg1 + " :No suck nick/channel");
+          }
+        } else {
+          sendIrcServerResponse(num, "401", arg1 + " :No suck nick/channel");
+        }
+      }
+    } else if (command.equals("AWAY")) {
 
     } else if (command.equals("QUIT")) {
       int uid = ircUserId[num];
@@ -813,6 +952,17 @@ void appendToIrcBuffer(int num, char c)
   }
 }
 
+int findIrcNick(String &nickname)
+{
+  for(int i = 0; i < MAX_IRC_CLIENTS; i++)
+  {
+    if (ircNicknames[i].equals(nickname))
+    {
+      return i;
+    }
+  }
+  return -1;
+}
 
 void loopIrc()
 {
