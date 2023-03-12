@@ -6,6 +6,7 @@ var keepAliveInterval;
 
 var lastTyped = 0;
 var typing = false;
+var myUsername = '';
 
 function setCookie(cname, cvalue, exdays) 
 {
@@ -152,6 +153,19 @@ function addIncomingMessage(username, text, picture = "spy.png", timestamp = nul
 
 }
 
+function updateNick()
+{
+    var oldNick = myUsername;
+    var newNick = document.getElementById('nicknameField').value.replaceAll(' ', '_');
+    if (oldNick != newNick)
+    {
+        sendEvent({"event":"name", "username":oldNick, "to":newNick});
+        myUsername = newNick;
+        setCookie("username", newNick, 30);
+        document.getElementById('nicknameField').value = newNick;
+    }
+}
+
 function logIt(message)
 {
     addIncomingMessage("The Reaper",message,"reaper.png");
@@ -248,6 +262,34 @@ function setupWebsocket()
                     removeUserEntry(jsonObject.username);
                 } else if (event == 'frequency') {
                     logIt("Frequency changed to " + jsonObject.mhz + " Mhz");
+                } else if (event == 'name') {
+                    var old_nick = jsonObject.username;
+                    var new_nick = jsonObject.to;
+                    var old_id = "user_" + old_nick;
+                    var new_id = "user_" + new_nick;
+                    if (document.getElementById(old_id) == undefined)
+                    {
+                        console.log("couldnt find element: " + old_id);
+                    } else {
+                        document.getElementById(old_id).id = new_id;
+                        var trow = document.getElementById("nick_" + old_id);
+                        if (trow != undefined)
+                        {
+                            trow.innerHTML = jsonObject.to;
+                            trow.id = "nick_" + new_id;
+                        }
+                        var trow2 = document.getElementById("details_" + old_id);
+                        if (trow2 != undefined)
+                        {
+                            trow2.id = "details_" + new_id;
+                        }
+                        var avatar = document.getElementById("avatar_" + old_id);
+                        if (avatar != undefined)
+                        {
+                            avatar.id = "avatar_" + new_id;
+                        }
+                        logIt(old_nick + " is now known as " + new_nick);
+                    }
                 }
             }
         };
@@ -271,13 +313,15 @@ window.onload = function() {
         a = String(a);
         a = a.substring(0,4);
         var suggested =  'Hacker' + a;
-        var nickname = prompt('enter nickname', suggested);
+        var nickname = prompt('enter nickname', suggested).replaceAll(' ', '_');
         if (nickname == null)
             nickname = suggested;
         setCookie("username", nickname, 30);
         document.getElementById("nicknameField").value = nickname;
+        myUsername = nickname;
     } else {
         document.getElementById("nicknameField").value = savedNickname;
+        myUsername = savedNickname;
     }
     setupWebsocket();
     $("#messageBox").keyup(function(event) {

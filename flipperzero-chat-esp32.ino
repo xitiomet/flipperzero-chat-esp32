@@ -60,6 +60,7 @@ int ircBufferPos[MAX_IRC_CLIENTS];
 int ircUserId[MAX_IRC_CLIENTS];
 String ircUsernames[MAX_IRC_CLIENTS];
 String ircNicknames[MAX_IRC_CLIENTS];
+bool ircGreeted[MAX_IRC_CLIENTS];
 
 WebSocketsServer webSocketServer(81);
 WebServer httpServer(80);
@@ -82,6 +83,7 @@ boolean captiveDNS = false;
 boolean displayInit = false;
 boolean replayChatHistory = true;
 
+int tick = 0;
 int maxFlippers = 0;
 long radioRxCount = 0;
 long lastSecondAt = 0;
@@ -241,6 +243,9 @@ void processJSONPayload(int num, uint8_t * payload)
           doRestart = true;
         } else if (event.equals("radioReset")) {
           flipperChatPreset();
+        } else if (event.equals("name") && root.containsKey("to")) {
+          String to = root["to"].as<String>();
+          userChangeName(username, to);
         }
       }
       root["source"] = source;
@@ -426,6 +431,7 @@ void setup()
     ircUserId[i] = -1;
     ircUsernames[i] = "";
     ircNicknames[i] = "";
+    ircGreeted[i] = false;
   }
   clearRadioBuffer();
   Serial.begin(115200);
@@ -678,15 +684,16 @@ void ircGreet(int num)
   sendIrcServerResponse(num, "252", "1 :IRC Operators online");
   sendIrcServerResponse(num, "254", "1 :channels formed");
   sendIrcServerResponse(num, "375", ":- " + line4 + " Message of the day -");
-  sendIrcServerResponse(num, "372", ":-    _____       __    ________             ________          __  ");
-  sendIrcServerResponse(num, "372", ":-   / ___/__  __/ /_  / ____/ /_  ____     / ____/ /_  ____ _/ /_ ");
-  sendIrcServerResponse(num, "372", ":-   \\__ \\/ / / / __ \\/ / __/ __ \\/_  /    / /   / __ \\/ __ `/ __/ ");
-  sendIrcServerResponse(num, "372", ":-  ___/ / /_/ / /_/ / /_/ / / / / / /_   / /___/ / / / /_/ / /_   ");
-  sendIrcServerResponse(num, "372", ":- /____/\\__,_/_.___/\\____/_/ /_/ /___/   \\____/_/ /_/\\__,_/\\__/   ");
+  sendIrcServerResponse(num, "372", ":-    _____       __    ________             ________          __");
+  sendIrcServerResponse(num, "372", ":-   / ___/__  __/ /_  / ____/ /_  ____     / ____/ /_  ____ _/ /_");
+  sendIrcServerResponse(num, "372", ":-   \\__ \\/ / / / __ \\/ / __/ __ \\/_  /    / /   / __ \\/ __ `/ __/");
+  sendIrcServerResponse(num, "372", ":-  ___/ / /_/ / /_/ / /_/ / / / / / /_   / /___/ / / / /_/ / /_");
+  sendIrcServerResponse(num, "372", ":- /____/\\__,_/_.___/\\____/_/ /_/ /___/   \\____/_/ /_/\\__,_/\\__/");
   sendIrcServerResponse(num, "372", ":-");
   sendIrcServerResponse(num, "372", ":-       https://github.com/xitiomet/flipperzero-chat-esp32");
   sendIrcServerResponse(num, "376", ":End of MOTD command");
   ircClients[num].print(":TheReaper INVITE " + ircNicknames[num] + " #lobby\r\n");
+  ircGreeted[num] = true;
 }
 
 bool get_token(String &from, String &to, uint8_t index, char separator)
@@ -726,15 +733,7 @@ void handleIrcCommand(int num)
   {
     String userLine = line.substring(5, line.length());
     ircUsernames[num] = userLine.substring(0, userLine.indexOf(' '));
-    if (!ircUsernames[num].equals("") && !ircNicknames[num].equals(""))
-    {
-      ircGreet(num);
-    }
-  } else if (line.startsWith("NICK ")) {
-    ircClients[num].println(line);
-    String nickname = line.substring(5, line.length());
-    ircNicknames[num] = nickname;
-    if (!ircUsernames[num].equals("") && !ircNicknames[num].equals(""))
+    if (!ircUsernames[num].equals("") && !ircNicknames[num].equals("") && !ircGreeted[num])
     {
       ircGreet(num);
     }
@@ -862,6 +861,22 @@ void handleIrcCommand(int num)
     }
     respList.trim();
     sendIrcServerResponse(num, "303", ":" + respList);
+  } else if (line.indexOf("NICK ") >= 0) {
+    int nickLocation = line.indexOf("NICK ");
+    String nickname = line.substring(5+nickLocation, line.length());
+    if (nickname.startsWith(":"))
+      nickname = nickname.substring(1, nickname.length());
+    if (ircNicknames[num].equals(""))
+    {
+      ircClients[num].println(line);
+    } else {
+      userChangeName(ircNicknames[num], nickname);
+    }
+    ircNicknames[num] = nickname;
+    if (!ircUsernames[num].equals("") && !ircNicknames[num].equals("") && !ircGreeted[num])
+    {
+      ircGreet(num);
+    }
   } else {
     String command = line;
     String arg1 = "";
@@ -876,10 +891,6 @@ void handleIrcCommand(int num)
       {
         arg1 = laterHalf.substring(0, secondSpace);
         arg2 = laterHalf.substring(secondSpace+1, laterHalf.length());
-        //Serial.print("arg1:");
-        //Serial.println(arg1);
-        //Serial.print("arg2:");
-        //Serial.println(arg2);
       } else {
         arg1 = laterHalf;
       }
@@ -991,6 +1002,7 @@ void loopIrc()
       ircNicknames[i] = "";
       ircBufferPos[i] = 0;
       ircBuffers[i][0] = '\0';
+      ircGreeted[i] = false;
       if (uid >= 0)
         deleteUser(uid);
     }
@@ -1002,6 +1014,7 @@ void loopIrc()
     {
       if (!ircClients[i]) // equivalent to !serverClients[i].connected()
       {
+        ircGreeted[i] = false;
         ircClients[i] = ircServer.available();
         Serial.print("New IRC client: ");
         Serial.println(ircClients[i].remoteIP());
@@ -1010,7 +1023,7 @@ void loopIrc()
     }
 
     //no free/disconnected spot so reject
-    if (i == MAX_IRC_CLIENTS) 
+    if (i >= MAX_IRC_CLIENTS) 
     {
       ircServer.available().println("busy");
     }
@@ -1029,6 +1042,35 @@ void lobbyPrivmsg(String &username, String &text)
 {
   String line = ":" + username + " PRIVMSG #lobby :" + text;
   broadcastIrcExcept(username, line);
+}
+
+void userChangeName(String &oldnick, String &newnick)
+{
+  int uid = findUser(oldnick);
+  if (uid >= 0)
+  {
+    String line = ":" + oldnick + " NICK :" + newnick;
+    broadcastIrc(line);
+    members[uid] = newnick;
+    int wsNum = member_nums[uid];
+    if (member_sources[uid].startsWith("irc"))
+      wsNum = -1;
+    String out;
+    StaticJsonDocument<1024> jsonBuffer;
+    jsonBuffer["username"] = oldnick;
+    jsonBuffer["event"] = "name";
+    jsonBuffer["rssi"] = member_rssi[uid];
+    jsonBuffer["source"] = member_sources[uid];
+    jsonBuffer["to"] = newnick;
+    serializeJson(jsonBuffer, out);
+    for(int i = 0; i < webSocketServer.connectedClients(); i++)
+    {
+      if (i != wsNum)
+        webSocketServer.sendTXT(i, out);
+    }
+    String xmitData = "\x1B[0;94m" + oldnick + " is now known as " + newnick + "\x1B[0m\r\n";
+    streamToRadio(xmitData);
+  }
 }
 
 void broadcastIrcExcept(String &username, String &line)
@@ -1141,6 +1183,9 @@ void loop()
   {
     everySecond();
     lastSecondAt = ts;
+    tick++;
+    if (tick >= 60)
+      tick = 0;
   }
 }
 
