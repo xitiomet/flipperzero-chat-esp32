@@ -765,7 +765,7 @@ void handleIrcCommand(int num)
       flashMessage(username, text);
       if (isAction)
       {
-        String xmitData = "\x1B[0;94m" + username + " " + text + "\x1B[0m\r\n";
+        String xmitData = "\x1B[0;94m" + text + "\x1B[0m\r\n";
         streamToRadio(xmitData);
       } else {
         String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
@@ -897,12 +897,19 @@ void handleIrcCommand(int num)
           if (wsNum >= 0 && uid >=0)
           {
             String nickname = ircNicknames[num];
+            bool isAction = false;
+            if (arg2.startsWith("\001ACTION"))
+            {
+              isAction = true;
+              arg2 = nickname + " " + arg2.substring(8, arg2.length()-1);
+            }
             StaticJsonDocument<3072> jsonBuffer;
             jsonBuffer["username"] = nickname;
             jsonBuffer["text"] = arg2;
             jsonBuffer["event"] = "private";
             jsonBuffer["rssi"] = WiFi.RSSI();
             jsonBuffer["utc"] = now();
+            jsonBuffer["action"] = isAction;
             jsonBuffer["source"] = member_sources[uid];
             jsonBuffer["to"] = members[findUserId];
             String out;
@@ -1192,6 +1199,7 @@ void tryMDNS()
     {
       MDNS.addService("ws", "tcp", 81);
       MDNS.addService("http", "tcp", 80);
+      MDNS.addService("irc", "tcp", 6667);
     }
   }
 }
@@ -1236,6 +1244,7 @@ void loadSettings()
     {
       Serial.println("Access Point Mode!");
       WiFi.mode(WIFI_AP);
+      WiFi.setHostname("FlipperZeroChat");
       WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
       line4 = apIP.toString();
       String ssid = settings["apSSID"].as<String>();
@@ -1268,6 +1277,8 @@ void loadSettings()
     } else {
       Serial.println("WiFi Client Mode!");
       WiFi.mode(WIFI_STA);
+      WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+      WiFi.setHostname("FlipperZeroChat");
     }
     if (settings.containsKey("wifi") && !apMode)
     {
