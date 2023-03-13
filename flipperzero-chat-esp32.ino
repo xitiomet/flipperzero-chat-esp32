@@ -46,7 +46,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define PIX_ROW_3 40
 #define PIX_ROW_4 56
 
-#define MAX_IRC_CLIENTS 5
+#define MAX_IRC_CLIENTS 7
 #define MAX_MEMBERS 40
 #define HISTORY_SIZE 15
 #define SS_PIN    5
@@ -90,7 +90,8 @@ long lastSecondAt = 0;
 String line1 = "";
 String line2 = "";
 String line3 = "";
-String line4 = "";
+String local_ip = "";
+String local_ssid = "";
 
 String flashMessageTitle = "";
 String flashMessageBody = "";
@@ -126,9 +127,10 @@ void flipperChatPreset()
   ELECHOUSE_cc1101.SpiWriteReg(CC1101_WORCTRL, 0xFB);
 }
 
-void advertiseGateway(String &ssid, String &ip)
+void advertiseGateway()
 {
-  String message = "\x1B[0;94mSubGhz Chat Bridge - Online\x1B[0m\r\n FREQUENCY " + String(frequency) + " Mhz\r\n SSID " + ssid + "\r\n IP " + ip + "\r\n";
+  int uc = userCount();
+  String message = "\x1B[0;94mSubGhz Chat Bridge - Online\x1B[0m\r\n FREQUENCY " + String(frequency) + " Mhz\r\n SSID " + local_ssid + "\r\n IP " + local_ip + "\r\n USERS " + String(uc) + "\r\n\r\n";
   streamToRadio(message);
 }
 
@@ -215,6 +217,11 @@ void processJSONPayload(int num, uint8_t * payload)
     {
       String username = root["username"].as<String>();
       String event = root["event"].as<String>();
+      int uid = findUser(username);
+      if (uid >= 0 && uid < MAX_MEMBERS)
+      {
+        member_last_active[uid] = millis();
+      }
       if (root.containsKey("text") && event.equals("chat"))
       {
         String text = root["text"].as<String>();
@@ -246,6 +253,8 @@ void processJSONPayload(int num, uint8_t * payload)
         } else if (event.equals("name") && root.containsKey("to")) {
           String to = root["to"].as<String>();
           userChangeName(username, to);
+        } else if (event.equals("advertise")) {
+          advertiseGateway();
         }
       }
       root["source"] = source;
@@ -532,7 +541,7 @@ void readChatFromRadioBuffer()
   {
     uid = registerUser(-1, username, source, radioRssi);
   }
-  if (uid >= 0 and uid < MAX_MEMBERS)
+  if (uid >= 0 && uid < MAX_MEMBERS)
   {
     member_last_active[uid] = millis();
   }
@@ -648,7 +657,7 @@ void redraw()
       display.setCursor(0,PIX_ROW_3);
       display.print(line3);
       display.setCursor(0,PIX_ROW_4);
-      display.print(line4);
+      display.print(local_ip);
     }
     display.display();
   }
@@ -672,18 +681,9 @@ void sendIrcServerResponse(int num, String code, String data)
   ircClients[num].print(output);
 }
 
-void ircGreet(int num)
+void ircMOTD(int num)
 {
-  sendIrcServerResponse(num, "001", ":Welcome to the Internet Relay Chat Network");
-  sendIrcServerResponse(num, "002", ":Your host is " + line4 + ", running FlipperZero SubGhz Chat Relay");
-  sendIrcServerResponse(num, "003", ":This server was created on unknown");
-  sendIrcServerResponse(num, "004", "FlipperZeroChat SubGhzChat * *");
-  sendIrcServerResponse(num, "005", "RFC2812 IRCD=FZSubGhzChat CHARSET=UTF-8 CASEMAPPING=ascii PREFIX=(qaohv)~&@%+ CHANTYPES=# CHANMODES=beI,k,l,imMnOPQRstVz CHANLIMIT=#&+:10 :are supported on this server");
-  sendIrcServerResponse(num, "005", "CHANNELLEN=50 NICKLEN=20 TOPICLEN=490 AWAYLEN=127 KICKLEN=400 MODES=5 MAXLIST=beI:50 EXCEPTS=e INVEX=I PENALTY FNC :are supported on this server");
-  sendIrcServerResponse(num, "251", ":There are " + String(userCount()) + " users on 1 server");
-  sendIrcServerResponse(num, "252", "1 :IRC Operators online");
-  sendIrcServerResponse(num, "254", "1 :channels formed");
-  sendIrcServerResponse(num, "375", ":- " + line4 + " Message of the day -");
+  sendIrcServerResponse(num, "375", ":- " + local_ip + " Message of the day -");
   sendIrcServerResponse(num, "372", ":-    _____       __    ________             ________          __");
   sendIrcServerResponse(num, "372", ":-   / ___/__  __/ /_  / ____/ /_  ____     / ____/ /_  ____ _/ /_");
   sendIrcServerResponse(num, "372", ":-   \\__ \\/ / / / __ \\/ / __/ __ \\/_  /    / /   / __ \\/ __ `/ __/");
@@ -692,6 +692,20 @@ void ircGreet(int num)
   sendIrcServerResponse(num, "372", ":-");
   sendIrcServerResponse(num, "372", ":-       https://github.com/xitiomet/flipperzero-chat-esp32");
   sendIrcServerResponse(num, "376", ":End of MOTD command");
+}
+
+void ircGreet(int num)
+{
+  sendIrcServerResponse(num, "001", ":Welcome to the Internet Relay Chat Network");
+  sendIrcServerResponse(num, "002", ":Your host is " + local_ip + ", running FlipperZero SubGhz Chat Relay");
+  sendIrcServerResponse(num, "003", ":This server was created on unknown");
+  sendIrcServerResponse(num, "004", "FlipperZeroChat SubGhzChat * *");
+  sendIrcServerResponse(num, "005", "RFC2812 IRCD=FZSubGhzChat CHARSET=UTF-8 CASEMAPPING=ascii PREFIX=(qaohv)~&@%+ CHANTYPES=# CHANMODES=beI,k,l,imMnOPQRstVz CHANLIMIT=#&+:10 :are supported on this server");
+  sendIrcServerResponse(num, "005", "CHANNELLEN=50 NICKLEN=20 TOPICLEN=490 AWAYLEN=127 KICKLEN=400 MODES=5 MAXLIST=beI:50 EXCEPTS=e INVEX=I PENALTY FNC :are supported on this server");
+  sendIrcServerResponse(num, "251", ":There are " + String(userCount()) + " users on 1 server");
+  sendIrcServerResponse(num, "252", "1 :IRC Operators online");
+  sendIrcServerResponse(num, "254", "1 :channels formed");
+  ircMOTD(num);
   ircClients[num].print(":TheReaper INVITE " + ircNicknames[num] + " #lobby\r\n");
   ircGreeted[num] = true;
 }
@@ -787,7 +801,7 @@ void handleIrcCommand(int num)
       // user is not registered!
       String rmip = ircClients[num].remoteIP().toString();
       String source = "irc_" + rmip;
-      ircUserId[num] = registerUser(num, username, source, WiFi.RSSI());
+      ircUserId[num] = registerUser(-1, username, source, WiFi.RSSI());
     }
     String ircJoin = ":" + nickname + "!~" + username + "@* JOIN :#lobby\r\n";
     ircClients[num].print(ircJoin);
@@ -813,7 +827,7 @@ void handleIrcCommand(int num)
     {
       if (members[i] != "")
       {
-        String whoResp = "#lobby " + members[i] + " " + member_sources[i] + " " + line4 + " " + members[i] + " H :0 " + members[i];
+        String whoResp = "#lobby " + members[i] + " " + member_sources[i] + " " + local_ip + " " + members[i] + " H :0 " + members[i];
         sendIrcServerResponse(num, "352", whoResp);
       }
     }
@@ -941,8 +955,38 @@ void handleIrcCommand(int num)
           sendIrcServerResponse(num, "401", arg1 + " :No suck nick/channel");
         }
       }
+    } else if (command.equals("MOTD")) {
+      ircMOTD(num);
     } else if (command.equals("AWAY")) {
 
+    } else if (command.equals("WHO")) {
+      for(int i = 0; i < MAX_MEMBERS; i++)
+      {
+        if (members[i] != "" && members[i].equals(arg1))
+        {
+          String whoResp = "#lobby " + members[i] + " " + member_sources[i] + " " + local_ip + " " + members[i] + " H :0 " + members[i];
+          sendIrcServerResponse(num, "352", whoResp);
+        }
+      }
+      sendIrcServerResponse(num, "315", "#lobby :End of WHO List");
+    } else if (command.equals("WHOIS")) {
+      int uid = findUser(arg1);
+      if (uid >= 0)
+      {
+          sendIrcServerResponse(num, "311", members[uid] + " ~" + members[uid] + " " + member_sources[uid] + " * :Anonymous");
+          sendIrcServerResponse(num, "312", members[uid] + " " + local_ip + " :IRC Server");
+          sendIrcServerResponse(num, "319", members[uid] + " :@#lobby");
+          sendIrcServerResponse(num, "378", members[uid] + " :is connecting from *@" + member_sources[uid] + " " + member_sources[uid]);
+          //sendResponse("338", wi.getNick() + " 255.255.255.255 :actually using host");
+          /*
+          if (wi.getAway() != null)
+          {
+             sendResponse("301", wi.getNick() + " :" + wi.getAway());
+          }*/
+          int idle = ((millis() - member_last_active[uid]) / 1000);
+          sendIrcServerResponse(num, "317", members[uid] + " " + String(idle) + " :Seconds Idle");
+      }
+      sendIrcServerResponse(num, "318", members[uid] + " :End of WHOIS list");
     } else if (command.equals("QUIT")) {
       int uid = ircUserId[num];
       ircUserId[num] = -1;
@@ -1015,6 +1059,9 @@ void loopIrc()
       if (!ircClients[i]) // equivalent to !serverClients[i].connected()
       {
         ircGreeted[i] = false;
+        ircUsernames[i] = "";
+        ircNicknames[i] = "";
+        ircUserId[i] = -1;
         ircClients[i] = ircServer.available();
         Serial.print("New IRC client: ");
         Serial.println(ircClients[i].remoteIP());
@@ -1124,7 +1171,7 @@ void everySecond()
     } else {
       if (last_wl_status != wl_status)
       {
-        line4 = "";
+        local_ip = "";
       }
     }
   }
@@ -1232,15 +1279,14 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
 
 void onNetworkConnect()
 {
-  String ssid = WiFi.SSID();
-  String ip = WiFi.localIP().toString();
+  local_ssid = WiFi.SSID();
+  local_ip = WiFi.localIP().toString();
   Serial.print("SSID: ");
-  Serial.println(ssid);
+  Serial.println(local_ssid);
   Serial.print("Network IP: ");
-  Serial.println(ip);
-  line4 = ip;
+  Serial.println(local_ip);
   tryMDNS();
-  advertiseGateway(ssid, ip);
+  advertiseGateway();
 }
 
 void tryMDNS()
@@ -1298,24 +1344,24 @@ void loadSettings()
       WiFi.mode(WIFI_AP);
       WiFi.setHostname("FlipperZeroChat");
       WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-      line4 = apIP.toString();
-      String ssid = settings["apSSID"].as<String>();
-      advertiseGateway(ssid, line4);
+      local_ip = apIP.toString();
+      local_ssid = settings["apSSID"].as<String>();
+      advertiseGateway();
       if (settings.containsKey("apPassword"))
       {
         String password = settings["apPassword"].as<String>();
         if (password.equals("null"))
         {
           Serial.println("AP has no password");
-          WiFi.softAP(ssid.c_str(), NULL);
+          WiFi.softAP(local_ssid.c_str(), NULL);
         } else {
           Serial.print("AP password = ");
           Serial.println(password);
-          WiFi.softAP(ssid.c_str(), password.c_str());
+          WiFi.softAP(local_ssid.c_str(), password.c_str());
         }
       } else {
         Serial.println("AP has no password");
-        WiFi.softAP(ssid.c_str(), NULL);
+        WiFi.softAP(local_ssid.c_str(), NULL);
       }
       wl_status = WL_CONNECTED;
       tryMDNS();
