@@ -114,6 +114,22 @@ Things that don't work since this isn't a real IRC server:
  * topic changes
  * kicks/bans/ignores
 
+ ### Serial2 Interface
+
+ I decided i wanted a simple way to walk around NYC with this device and my phone and not worry about tethering.
+ It seemed worth adding one more inteface for simplicity using TX2 and RX2. This allows the device to be hooked up to
+ any ANSI terminal or in my case a bluetooth terminal using an HC-08 bluetooth LE module.
+
+ The interface mirrors the chat app on the flipper itself as far as coloring and formatting. However it supports a few
+ commands.
+
+ * /nick myNickname - set your nickname and join the chat
+ * /advertise - advertise the gateway over the radio
+ * /part - leave the chat (messages will still come in, you just cant speak until you /nick again)
+ * /freq 315 - change the CC1101 frequency to 315 Mhz
+ * /history - replay the chat history (only for the Serial2 user)
+ * /restart - restart the device
+
 ### Websocket protocol
 
 If you would like to make your own client to interface with this device the protocol is pretty simple. port 81 is a websocket server all messages are single line json objects.

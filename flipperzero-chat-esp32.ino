@@ -201,6 +201,47 @@ void replayHistory(int wsnum)
   }
 }
 
+void replayHistorySerial2()
+{
+  int t = historyPosition;
+  for(int i = 0; i < HISTORY_SIZE; i++)
+  {
+    if (!history[t].equals(""))
+    {
+      DynamicJsonDocument histObj(2048);
+      DeserializationError error = deserializeJson(histObj, history[t]);
+      if (error)
+      {
+        Serial.println(error.c_str());
+      } else if (histObj.containsKey("username") && histObj.containsKey("event") && histObj.containsKey("text") && histObj.containsKey("source")){
+        String username = histObj["username"].as<String>();
+        String event = histObj["event"].as<String>();
+        String text = histObj["text"].as<String>();
+        String source = histObj["source"].as<String>();
+        if (event.equals("chat"))
+        {
+          if (source.equals("flipper"))
+          {
+            String line = "\x1B[0;33m" + username + "\x1B[0m: " + text + "\r\n";
+            Serial2.print(line);
+          } else {
+            String line = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
+            Serial2.print(line);
+          }
+        } else if (event.equals("info")) {
+          String line = "\x1B[0;94m" + text + "\x1B[0m\r\n";
+          Serial2.print(line);
+        }
+      }
+    }
+    t++;
+    if (t >= HISTORY_SIZE)
+    {
+      t = 0;
+    }
+  }
+}
+
 void changeFrequency(float frq)
 {
   if ((frq >= 300.00 && frq <= 348.00) || (frq >= 387.00 && frq <= 464.00) || (frq >= 779.00 && frq <= 928.00))
@@ -1361,6 +1402,25 @@ void handleSerialString()
   if (Serial2Buffer.equals("/advertise") || Serial2Buffer.equals("/ADVERTISE"))
   {
     advertiseGateway();
+    return;
+  }
+  if (Serial2Buffer.equals("/history") || Serial2Buffer.equals("/HISTORY"))
+  {
+    replayHistorySerial2();
+    return;
+  }
+  if (Serial2Buffer.equals("/restart") || Serial2Buffer.equals("/RESTART"))
+  {
+    ESP.restart();
+    return;
+  }
+  if (Serial2Buffer.equals("/part") || Serial2Buffer.equals("/quit") || Serial2Buffer.equals("/PART") || Serial2Buffer.equals("/QUIT"))
+  {
+    if (!Serial2Nickname.equals(""))
+    {
+      deleteUser(Serial2Nickname);
+      Serial2Nickname = "";
+    }
     return;
   }
   if (!Serial2Nickname.equals(""))
