@@ -39,6 +39,8 @@ function avatarFromSource(source)
       return "flipper.png";
     else if (source.startsWith("irc"))
       return "irc.png";
+    else if (source.startsWith("serial"))
+      return "serial.png";
     else
       return "spy.png";
 }
