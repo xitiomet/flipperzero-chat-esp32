@@ -2,6 +2,7 @@
     "startFrequency": 433.92,
     "apMode": true,
     "captiveDNS": false,
+    "hostname": "FlipperZeroChat",
     "apSSID": "FlipperChat",
     "apPassword": "changeme",
     "replayChatHistory": true,

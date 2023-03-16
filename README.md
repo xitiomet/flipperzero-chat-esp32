@@ -16,7 +16,7 @@ In order to build this you will need:
      * Ability to upload FatFS image - https://github.com/lorol/arduino-esp32fs-plugin
      * ArduinoJson 6.19.3 - https://arduinojson.org/?utm_source=meta&utm_medium=library.properties
      * Adafruit_SSD1306 2.5.1 - https://github.com/adafruit/Adafruit_SSD1306
-     * Time Library 1.6 - https://github.com/PaulStoffregen/Time
+     * Time Library 1.6.1 - https://github.com/PaulStoffregen/Time
 
 
 ### Building your own bridge
@@ -75,7 +75,7 @@ The "captiveDNS" setting will redirect any DNS queries to the device's apMode IP
 Flash Settings for ESP32 (in aruino ide)
  * CPU Frequency - 240Mhz
  * Flash Frequency - 80Mhz
- * Partition Scheme - Default 4MB with FFAT (1.2MB / 1.5MB)
+ * Partition Scheme - NO OTA (2MB APP / 2MB FATFS)
  * Flash Mode - DIO
  * PSRAM - Disabled
  * Events Run on - Core 0
