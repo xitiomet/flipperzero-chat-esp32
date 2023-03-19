@@ -17,6 +17,7 @@ In order to build this you will need:
      * ArduinoJson 6.19.3 - https://arduinojson.org/?utm_source=meta&utm_medium=library.properties
      * Adafruit_SSD1306 2.5.1 - https://github.com/adafruit/Adafruit_SSD1306
      * Time Library 1.6.1 - https://github.com/PaulStoffregen/Time
+     * NTPClient 3.2.0 - https://github.com/arduino-libraries/NTPClient
 
 
 ### Building your own bridge

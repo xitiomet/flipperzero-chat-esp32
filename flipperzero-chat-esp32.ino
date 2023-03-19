@@ -22,6 +22,7 @@
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
+#include <WiFiUdp.h>
 #include <ESPmDNS.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
@@ -31,6 +32,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <NTPClient.h>
 #include "TimeLib.h"
 #include "BluetoothSerial.h"
 
@@ -66,6 +68,8 @@ WebSocketsServer webSocketServer(81);
 WebServer httpServer(80);
 IPAddress apIP(10, 10, 10, 1);
 DNSServer dnsServer;
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "time.nist.gov", 0, 60000);
 
 String history[HISTORY_SIZE];
 int historyPosition = 0;
@@ -242,14 +246,15 @@ void replayHistorySerial2()
   }
 }
 
-void changeFrequency(float frq)
+void changeFrequency(String &username, float frq)
 {
   if ((frq >= 300.00 && frq <= 348.00) || (frq >= 387.00 && frq <= 464.00) || (frq >= 779.00 && frq <= 928.00))
   {
     frequency = frq;
     ELECHOUSE_cc1101.setMHZ(frequency);
     broadcastIrc(":TheReaper TOPIC #lobby :" + String(frequency) + " Mhz");
-    String line = "\x1B[0;94mThe frequency has been changed to " + String(frequency) + " Mhz\x1B[0m\r\n";
+    broadcastIrc(":TheReaper NOTICE #lobby :The frequency has been changed to " + String(frequency) + " Mhz (by " + username + ")");
+    String line = "\x1B[0;94mThe frequency has been changed to " + String(frequency) + " Mhz (by " + username + ")\x1B[0m\r\n";
     Serial2.print(line);
   }
 }
@@ -297,7 +302,7 @@ void processJSONPayload(int num, uint8_t * payload)
         } else if (event.equals("part")) {
           deleteUser(username);
         } if (event.equals("frequency")) {
-          changeFrequency(root["mhz"].as<float>());
+          changeFrequency(username, root["mhz"].as<float>());
         } else if (event.equals("raw")) {
           String data = root["data"].as<String>();
           streamToRadio(data);
@@ -423,6 +428,7 @@ int registerUser(int wsNum, String &username, String &source, int rssi)
   return -1;
 }
 
+// delete all users connected to a specific websocket
 void deleteUsersForNum(int wsNum)
 {
   if (wsNum >= 0)
@@ -437,6 +443,7 @@ void deleteUsersForNum(int wsNum)
   }
 }
 
+// find user id by username
 int findUser(String &username)
 {
   for(int i = 0; i < MAX_MEMBERS; i++)
@@ -449,6 +456,7 @@ int findUser(String &username)
   return -1;
 }
 
+// delete user by username
 int deleteUser(String &username)
 {
   int idx = findUser(username);
@@ -459,6 +467,7 @@ int deleteUser(String &username)
   return idx;
 }
 
+// delete user by user id
 void deleteUser(int idx)
 {
   if (!members[idx].equals(""))
@@ -767,6 +776,7 @@ void checkRadio()
   }
 }
 
+// show a message on the OLED screen of the device
 void flashMessage(String &title, String &body)
 {
   flashMessageAt = millis();
@@ -774,6 +784,7 @@ void flashMessage(String &title, String &body)
   flashMessageBody = body;
 }
 
+// Refresh the OLED screen
 void redraw()
 {
   if (displayInit)
@@ -855,6 +866,7 @@ void ircGreet(int num)
   ircGreeted[num] = true;
 }
 
+// a stringtokenizer
 bool get_token(String &from, String &to, uint8_t index, char separator)
 {
   uint16_t start = 0, idx = 0;
@@ -914,7 +926,7 @@ void handleIrcCommand(int num)
       if (text.startsWith("!FREQ ") || text.startsWith("!freq "))
       {
         float newFreq = text.substring(6, text.length()).toFloat();
-        changeFrequency(newFreq);
+        changeFrequency(ircNicknames[num], newFreq);
         String out;
         StaticJsonDocument<1024> jsonBuffer;
         jsonBuffer["username"] = members[uid];
@@ -1161,6 +1173,24 @@ void handleIrcCommand(int num)
           return;
         }
       }
+    } else if (command.equals("NOTICE")) {
+      if (arg2.startsWith(":"))
+      {
+        arg2 = arg2.substring(1, arg2.length());
+      }
+      if (arg1.equals("#lobby"))
+      {
+        //String line = ":" + ircNicknames[num] + " NOTICE #lobby :" + arg2 + "\r\n";
+        lobbyNotice(ircNicknames[num], arg2);
+      } else {
+        int findIrcId = findIrcNick(arg1);
+        if (findIrcId >= 0)
+        {
+          String line = ":" + ircNicknames[num] + " NOTICE " + ircNicknames[findIrcId] + " :" + arg2 + "\r\n";
+          ircClients[findIrcId].print(line);
+          return;
+        }
+      }
     } else if (command.equals("MOTD") || command.equals("motd")) {
       ircMOTD(num);
       return;
@@ -1304,6 +1334,12 @@ void lobbyPrivmsg(String &username, String &text)
   broadcastIrcExcept(username, line);
 }
 
+void lobbyNotice(String &username, String &text)
+{
+  String line = ":" + username + " NOTICE #lobby :" + text;
+  broadcastIrcExcept(username, line);
+}
+
 void userChangeName(String &oldnick, String &newnick, bool radio)
 {
   int uid = findUser(oldnick);
@@ -1386,10 +1422,13 @@ void handleSerialString()
   if (Serial2Buffer.startsWith("/FREQ ") || Serial2Buffer.startsWith("/freq "))
   {
     float newFreq = Serial2Buffer.substring(6, Serial2Buffer.length()).toFloat();
-    changeFrequency(newFreq);
+    String username = Serial2Nickname;
+    if (username.equals(""))
+      username = "serial";
+    changeFrequency(username, newFreq);
     String out;
     StaticJsonDocument<1024> jsonBuffer;
-    jsonBuffer["username"] = Serial2Nickname;
+    jsonBuffer["username"] = username;
     jsonBuffer["event"] = "frequency";
     jsonBuffer["rssi"] = 0;
     jsonBuffer["mhz"] = frequency;
@@ -1407,6 +1446,29 @@ void handleSerialString()
   if (Serial2Buffer.equals("/history") || Serial2Buffer.equals("/HISTORY"))
   {
     replayHistorySerial2();
+    return;
+  }
+  if (Serial2Buffer.equals("/status") || Serial2Buffer.equals("/STATUS"))
+  {
+    Serial2.print("*** " + hostname + " status ***\r\n");
+    Serial2.print("UTC " + String(now()) + "\r\n");
+    Serial2.print("SSID " + local_ssid + "\r\n");
+    Serial2.print("IP " + local_ip + "\r\n");
+    Serial2.print("Frequency " + String(frequency) + " Mhz\r\n");
+    Serial2.print("Radio packets received " + String(radioRxCount) + "\r\n");
+    Serial2.print("FlipperZero's - Online " + String(flipperCount) + ", Seen " + String(maxFlippers) + "\r\n");
+    Serial2.print("Network Connections " + String(networkCount) + "\r\n");
+    Serial2.print("Total Users " + String(userCount()) + "\r\n");
+    Serial2.print("\r\n");
+    for(int i = 0; i < MAX_MEMBERS; i++)
+    {
+      if (members[i] != "")
+      {
+        long idle = millis() - member_last_active[i];
+        Serial2.print(members[i] + "@" + member_sources[i] + " IDLE " + String(idle) + "ms RSSI " + String(member_rssi[i]) + "\r\n");
+      }
+    }
+    Serial2.print("\r\n");
     return;
   }
   if (Serial2Buffer.equals("/restart") || Serial2Buffer.equals("/RESTART"))
@@ -1476,8 +1538,22 @@ void loopSerial()
   }
 }
 
+time_t getNTPTime()
+{
+  if (timeClient.isTimeSet())
+  {
+    return (time_t) timeClient.getEpochTime();
+  } else {
+    return 0;
+  }
+}
+
 void loopNetwork()
 {
+  if (!apMode)
+  {
+    timeClient.update();
+  }
   webSocketServer.loop();
   httpServer.handleClient();
   loopIrc();
@@ -1511,7 +1587,7 @@ void everySecond()
       if (member_sources[i].equals("flipper"))
       {
         flipperCount++;
-      } else {
+      } else if (member_sources[i].startsWith("irc_") || member_sources[i].startsWith("ws_")) {
         networkCount++;
       }
       if ((member_sources[i].equals("flipper") || member_sources[i].equals("radio") || member_sources[i].equals("serial")) && member_last_active[i] >= 0)
@@ -1717,6 +1793,9 @@ void loadSettings()
       WiFi.mode(WIFI_STA);
       WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
       WiFi.setHostname(hostname.c_str());
+      timeClient.begin();
+      setSyncProvider(getNTPTime);
+      setSyncInterval(30);
     }
     if (settings.containsKey("wifi") && !apMode)
     {
