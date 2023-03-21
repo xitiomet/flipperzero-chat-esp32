@@ -180,7 +180,7 @@ function setupWebsocket()
         //logIt("Attempting to connect to Channel " + websocketChannel);
         var hostname = location.hostname;
         if (hostname == '')
-            hostname = '192.168.34.106';
+            hostname = '192.168.34.243';
         var wsUrl = 'ws://' + hostname + ':81/';
         logIt("Connecting to " + wsUrl);
         connection = new WebSocket(wsUrl, ['arduino']);

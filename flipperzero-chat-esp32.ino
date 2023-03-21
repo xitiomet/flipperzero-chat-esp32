@@ -56,6 +56,7 @@ float frequency = 433.92;
 
 WiFiMulti wifiMulti;
 WiFiServer ircServer(6667);
+
 WiFiClient ircClients[MAX_IRC_CLIENTS];
 char ircBuffers[MAX_IRC_CLIENTS][1024];
 int ircBufferPos[MAX_IRC_CLIENTS];
@@ -74,6 +75,7 @@ NTPClient timeClient(ntpUDP, "time.nist.gov", 0, 60000);
 String history[HISTORY_SIZE];
 int historyPosition = 0;
 
+//member storage for all users, irc, websocket, radio, flipper
 String members[MAX_MEMBERS];
 String member_sources[MAX_MEMBERS];
 int member_nums[MAX_MEMBERS];
@@ -1377,7 +1379,7 @@ void broadcastIrcExcept(String &username, String &line)
 {
   //Serial.print("IRC OUT: ");
   //Serial.println(line);
-  int uid = findUser(username);
+  int uid = findUser(username); 
   for (int i = 0; i < MAX_IRC_CLIENTS; i++)
   {
     if (ircClients[i] && ircUserId[i] >= 0 && ircUserId[i] != uid)
@@ -1872,6 +1874,18 @@ void handleFileRead(String path)
   String pathWithGz = path + ".gz";
   if (FFat.exists(pathWithGz) || FFat.exists(path))
   {
+    if (httpServer.method() == HTTP_POST)
+    {
+      if (httpServer.hasArg("body") && path.equals("/settings.json"))
+      {
+        Serial.println("Write settings.json");
+        String body = httpServer.arg("body");
+        File file = FFat.open("/settings.json", FILE_WRITE);
+        file.print(body);
+        file.flush();
+        file.close();
+      }
+    }
     if (FFat.exists(pathWithGz))
     {
       path += ".gz";

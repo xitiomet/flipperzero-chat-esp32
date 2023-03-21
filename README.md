@@ -56,16 +56,19 @@ Once you've downloaded the source and properly setup your IDE for flashing:
 ```json
 {
   "startFrequency": 433.92,
-    "apMode": true,
-    "captiveDNS": false,
-    "apSSID": "FlipperChat",
-    "apPassword": "changeme",
-    "wifi": [
-        {
-          "ssid": "Your network name",
-          "password": "wifi pass"
-        }
-    ]
+  "apMode": true,
+  "captiveDNS": false,
+  "hostname": "FlipperZeroChat",
+  "apSSID": "FlipperChat",
+  "apPassword": "changeme",
+  "replayChatHistory": true,
+  "Serial2Baud": 115200,
+  "wifi": [
+      {
+        "ssid": "Your network name",
+        "password": "wifi pass"
+      }
+  ]
 }
 
 ```
@@ -103,17 +106,20 @@ If the gateway starts malfunctioning any web user can type "/restart" to reboot 
 So I decided to add support for IRC clients. Letting users bring their favorite chat interface to this project.
 
 I've Tested the following clients:
- * irssi
- * pidgin
- * mIRC
+ * [irssi](https://irssi.org/)
+ * [Pidgin](https://www.pidgin.im/)
+ * [mIRC](https://www.mirc.com/)
+ * [Konversation](https://konversation.kde.org/)
+ * [IRC for Android](https://play.google.com/store/apps/details?id=com.countercultured.irc4android)
 
-once you connect simply "/join #lobby"
+once you connect simply "/join #lobby" this is the ONLY channel on this server since the other interfaces only provide one room.
 
 Things that don't work since this isn't a real IRC server:
  * private messages (except to other irc connections)
  * away messages
- * topic changes
+ * topic changes (topic in #lobby will reflect frequency and is controlled by @TheReaper)
  * kicks/bans/ignores
+ * creating rooms
 
  ### Serial2 Interface
 
@@ -129,6 +135,7 @@ Things that don't work since this isn't a real IRC server:
  * /part - leave the chat (messages will still come in, you just cant speak until you /nick again)
  * /freq 315 - change the CC1101 frequency to 315 Mhz
  * /history - replay the chat history (only for the Serial2 user)
+ * /status - get a full status report on the device, including connected users
  * /restart - restart the device
 
 ### Websocket protocol

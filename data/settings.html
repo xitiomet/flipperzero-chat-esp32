@@ -1,0 +1,334 @@
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <script src="jquery.min.js"></script>
+  <style type="text/css">
+    .circle
+    {
+      width: 50px;
+      height: 50px;
+      -webkit-border-radius: 15px;
+      -moz-border-radius: 15px;
+      border-radius: 15px;
+      background: black;
+      display: inline-block;
+      border: 1px solid white;
+    }
+    .flip-horizontal
+    {
+        -moz-transform: scaleX(-1);
+        -webkit-transform: scaleX(-1);
+        -o-transform: scaleX(-1);
+        transform: scaleX(-1);
+        -ms-filter: fliph; /*IE*/
+        filter: fliph; /*IE*/
+    }
+    html
+    {
+        height: 100%;
+        width: 100%;
+    }
+    body
+    {
+        background-color: #000000;
+        margin: 0px 0px 0px 0px;
+        padding: 0px 0px 0px 0px;
+        color: #ffffff;
+        height: 100%;
+        width: 100%;
+    }
+    #statusOutput {
+        background-color: black;
+        color: #00FF00;
+        padding: 5px 5px 5px 5px;
+        font-weight: bold;
+        font-size: 16px;
+        font-family: 'Courier New', monospace;
+    }
+    #arrow
+    {
+        filter: invert(1);
+    }
+    progress[value] {
+      /* Reset the default appearance */
+      -webkit-appearance: none;
+       appearance: none;
+      border-radius: 4px;
+      border: 1px solid grey;
+      width: 100%;
+      height: 40px;
+    }
+    progress[value]::-webkit-progress-bar {
+      background-color: #000;
+      border-radius: 4px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25) inset;
+    }
+    progress[value]::-webkit-progress-value {
+      background-image:
+           -webkit-linear-gradient(top, 
+                                   rgba(255, 255, 255, .25), 
+                                   rgba(0, 0, 0, .25)),
+           -webkit-linear-gradient(left, #09c, #f44);
+
+        border-radius: 4px; 
+        background-size: 35px 40px, 100% 100%, 100% 100%;
+    }
+    /* The switch - the box around the slider */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+
+    /* Hide default HTML checkbox */
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    /* The slider */
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      -webkit-transition: .4s;
+      transition: .4s;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      -webkit-transition: .4s;
+      transition: .4s;
+    }
+
+    input:checked + .slider {
+      background-color: #2196F3;
+    }
+
+    input:focus + .slider {
+      box-shadow: 0 0 1px #2196F3;
+    }
+
+    input:checked + .slider:before {
+      -webkit-transform: translateX(26px);
+      -ms-transform: translateX(26px);
+      transform: translateX(26px);
+    }
+
+    /* Rounded sliders */
+    .slider.round {
+      border-radius: 34px;
+    }
+
+    .slider.round:before {
+      border-radius: 50%;
+    }
+  </style>
+  <script type="text/javascript">
+      
+function findNextNetworkId()
+{
+    var idx = 0;
+    var el = document.getElementById('net_' + idx);
+    while (el != null)
+    {
+        idx++;
+        el = document.getElementById('net_' + idx);
+    }
+    return idx;
+}
+
+function delWifi(idx)
+{
+    var net = document.getElementById('net_' + idx);
+    if (net != undefined)
+    {
+        document.getElementById('networks').removeChild(net);
+    }
+}
+
+function addBlankNetwork()
+{
+    var idx = findNextNetworkId();
+    var newDiv = document.createElement('div');
+    newDiv.id = "net_" + idx;
+    newDiv.style.padding = '2px 2px 2px 2px';
+    newDiv.style.border = '1px white dotted';
+    newDiv.style.marginBottom = '5px';
+    newDiv.innerHTML = "<table><tr><td>SSID</td><td><input type=\"text\" name=\"ssid_" + idx + "\" id=\"ssid_" + idx + "\" /></td><td rowspan=\"2\"><button onclick=\"delWifi(" + idx + ")\">delete</button></td></tr><tr><td>Password</td><td><input type=\"text\" name=\"password_" + idx + "\" id=\"password_" + idx + "\" /></td></tr></table>";
+    document.getElementById('networks').appendChild(newDiv);
+    return idx;
+}
+
+function isNumeric(n) {
+  return !isNaN(parseFloat(n)) && isFinite(n);
+}
+
+function produceJSON()
+{
+    var outObject = {};
+    const allInputs = document.getElementsByTagName("input");
+    for(let i in allInputs)
+    {
+        var input = allInputs[i];
+        var id = input.id;
+        if (id != undefined)
+        {
+            if (!id.startsWith('ssid_') && !id.startsWith('password_'))
+            {
+                if (input.type == 'text' || input.type == 'password')
+                {
+                    if (isNumeric(input.value))
+                    {
+                        outObject[id] = parseFloat(input.value);
+                    } else {
+                        if (input.value == '')
+                        {
+                            //dont write the field then
+                            //outObject[id] = null;
+                        } else {
+                            outObject[id] = input.value;
+                        }
+                    }
+                } else if (input.type == 'checkbox') {
+                    outObject[id] = input.checked;
+                }
+            }
+        }
+    }
+    var wifiObject = [];
+    for(let i = 0; i < findNextNetworkId(); i++)
+    {
+        var wo = {"ssid": document.getElementById('ssid_'+i).value,"password": document.getElementById('password_'+i).value};
+        wifiObject[i] = wo;
+    }
+    outObject['wifi'] = wifiObject;
+    console.log(JSON.stringify(outObject));    
+    $.post( "settings.json", {"body": JSON.stringify(outObject)});
+}
+
+  window.onload = function ()
+  {
+      $.getJSON( "settings.json?rnd=" + Math.random(), function( data ) {
+          var items = [];
+          $.each( data, function( key, val ) {
+                console.log("key:" + key);
+                if (key == "wifi")
+                {
+                    for(let n in val)
+                    {
+                        var network = val[n];
+                        var ssid = network.ssid;
+                        var password = network.password;
+                        var idx = addBlankNetwork();
+                        document.getElementById('ssid_' + idx).value = ssid;
+                        document.getElementById('password_' + idx).value = password;
+                    }
+                } else {
+                    var el = document.getElementById(key);
+                    if (el != null)
+                    {
+                        console.log(el.nodeName + " - " + el.type);
+                        if (el.nodeName == 'INPUT')
+                        {
+                            if (el.type == 'text' || el.type == 'number' || el.type == 'password')
+                            {
+                                el.value = val;
+                            } else if (el.type == 'checkbox') {
+                                console.log(val);
+                                el.checked = val;
+                            }
+                        }
+                    }
+                }
+           });
+
+      });
+      
+  };
+  </script>
+</head>
+<body>
+    <table style="width: 100%;" cellpadding="5">
+        <tr>
+            <td align="center">
+                <b style="font-size: 26px;">SubGhz Chat Settings</b>
+            </td>
+        </tr>
+        <tr>
+            <td align="center">
+                <table cellspacing="10">
+                    <tr> 
+                        <td><b>Hostname</b></td>
+                        <td><input type="text" name="hostname" id="hostname" /></td>
+                    </tr>
+                    <tr> 
+                        <td><b>Start Frequency</b></td>
+                        <td><input type="text" name="startFrequency" id="startFrequency" /></td>
+                    </tr>
+                    <tr> 
+                        <td><b>Serial2 Baud</b></td>
+                        <td><input type="text" name="Serial2Baud" id="Serial2Baud" /></td>
+                    </tr>
+                    <tr> 
+                        <td><b>Access Point Mode</b></td>
+                        <td><label class="switch">
+                              <input type="checkbox" id="apMode" name="apMode" />
+                              <span class="slider round"></span>
+                        </label></td>
+                    </tr>
+                    <tr> 
+                        <td><b>Access Point SSID</b></td>
+                        <td><input type="text" name="apSSID" id="apSSID" /></td>
+                    </tr>
+                    <tr> 
+                        <td><b>Access Point Password</b></td>
+                        <td><input type="text" name="apPassword" id="apPassword" /></td>
+                    </tr>
+                    <tr> 
+                        <td><b>Captive DNS</b></td>
+                        <td><label class="switch">
+                              <input type="checkbox" id="captiveDNS" name="captiveDNS" />
+                              <span class="slider round"></span>
+                        </label></td>
+                    </tr>
+                    <tr> 
+                        <td><b>Replay Chat History</b></td>
+                        <td><label class="switch">
+                              <input type="checkbox" id="replayChatHistory" name="replayChatHistory" />
+                              <span class="slider round"></span>
+                        </label></td>
+                    </tr>
+                    <tr> 
+                        <td><b>WiFi Networks</b><br /><button onclick="addBlankNetwork()">Add</button></td>
+                        <td id="networks">
+                            
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>
+                            <button onclick="produceJSON()">Save</button>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+
