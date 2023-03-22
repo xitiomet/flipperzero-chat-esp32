@@ -202,24 +202,32 @@ function setupWebsocket()
             {
                 document.getElementById('freq').innerHTML = jsonObject.mhz + " Mhz";
             }
-            if (jsonObject.hasOwnProperty('users'))
-            {
-                var usersList = jsonObject.users;
-                for (var i = 0; i < usersList.length; i++) 
-                {
-                    var user = usersList[i];
-                    if (user.s == 'flipper' || user.s == 'radio')
-                    {
-                        addUserEntry(user.u, "RSSI " + user.r, avatarFromSource(user.s));
-                    } else {
-                        addUserEntry(user.u, user.s, avatarFromSource(user.s));
-                    }
-                }
-            }
             if (jsonObject.hasOwnProperty('event'))
             {
                 var event = jsonObject.event;
-                if (event == 'chat') {
+                if (event == 'greet') {
+                    if (jsonObject.hasOwnProperty('users'))
+                    {
+                        var usersList = jsonObject.users;
+                        for (var i = 0; i < usersList.length; i++) 
+                        {
+                            var user = usersList[i];
+                            if (user.s == 'flipper' || user.s == 'radio')
+                            {
+                                addUserEntry(user.u, "RSSI " + user.r, avatarFromSource(user.s));
+                            } else {
+                                addUserEntry(user.u, user.s, avatarFromSource(user.s));
+                            }
+                        }
+                    }
+                    if (jsonObject.hasOwnProperty('replayChatHistory'))
+                    {
+                        if (jsonObject.replayChatHistory)
+                        {
+                            sendEvent({"event":"history", "username": document.getElementById("nicknameField").value});
+                        }
+                    }
+                } else if (event == 'chat') {
                     if (jsonObject.hasOwnProperty('text'))
                     {
                         var picture = "spy.png";

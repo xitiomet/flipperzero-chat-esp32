@@ -258,6 +258,28 @@ void changeFrequency(String &username, float frq)
     broadcastIrc(":TheReaper NOTICE #lobby :The frequency has been changed to " + String(frequency) + " Mhz (by " + username + ")");
     String line = "\x1B[0;94mThe frequency has been changed to " + String(frequency) + " Mhz (by " + username + ")\x1B[0m\r\n";
     Serial2.print(line);
+    String out;
+    int uid = findUser(username);
+    if (uid >= 0)
+    {
+      StaticJsonDocument<1024> jsonBuffer;
+      jsonBuffer["username"] = members[uid];
+      jsonBuffer["event"] = "frequency";
+      jsonBuffer["rssi"] = member_rssi[uid];
+      jsonBuffer["mhz"] = frequency;
+      jsonBuffer["source"] = member_sources[uid];
+      jsonBuffer["utc"] = now();
+      serializeJson(jsonBuffer, out);
+      webSocketServer.broadcastTXT(out);
+    } else {
+      StaticJsonDocument<1024> jsonBuffer;
+      jsonBuffer["username"] = username;
+      jsonBuffer["event"] = "frequency";
+      jsonBuffer["mhz"] = frequency;
+      jsonBuffer["utc"] = now();
+      serializeJson(jsonBuffer, out);
+      webSocketServer.broadcastTXT(out);
+    }
   }
 }
 
@@ -283,6 +305,12 @@ void processJSONPayload(int num, uint8_t * payload)
       {
         member_last_active[uid] = millis();
       }
+      // Lets set the time if this user is providing it!
+      if (timeStatus() != timeSet && root.containsKey("utc"))
+      {
+        time_t utc = root["utc"].as<time_t>();
+        setTime(utc);
+      }
       if (root.containsKey("text") && event.equals("chat"))
       {
         String text = root["text"].as<String>();
@@ -301,22 +329,32 @@ void processJSONPayload(int num, uint8_t * payload)
         if (event.equals("join"))
         {
           registerUser(num, username, source, WiFi.RSSI());
+          return;
         } else if (event.equals("part")) {
           deleteUser(username);
+          return;
         } if (event.equals("frequency")) {
           changeFrequency(username, root["mhz"].as<float>());
+          return;
         } else if (event.equals("raw")) {
           String data = root["data"].as<String>();
           streamToRadio(data);
+          return;
         } else if (event.equals("restart")) {
           doRestart = true;
         } else if (event.equals("radioReset")) {
           flipperChatPreset();
+          return;
         } else if (event.equals("name") && root.containsKey("to")) {
           String to = root["to"].as<String>();
           userChangeName(username, to, true);
+          return;
         } else if (event.equals("advertise")) {
           advertiseGateway();
+          return;
+        } else if (event.equals("history")) {
+          replayHistory(num);
+          return;
         }
       }
       root["source"] = source;
@@ -335,11 +373,6 @@ void processJSONPayload(int num, uint8_t * payload)
       if (event.equals("chat"))
       {
         saveHistory(out);
-      }
-      if (timeStatus() != timeSet && root.containsKey("utc"))
-      {
-        time_t utc = root["utc"].as<time_t>();
-        setTime(utc);
       }
     }
     if (doRestart)
@@ -929,16 +962,6 @@ void handleIrcCommand(int num)
       {
         float newFreq = text.substring(6, text.length()).toFloat();
         changeFrequency(ircNicknames[num], newFreq);
-        String out;
-        StaticJsonDocument<1024> jsonBuffer;
-        jsonBuffer["username"] = members[uid];
-        jsonBuffer["event"] = "frequency";
-        jsonBuffer["rssi"] = member_rssi[uid];
-        jsonBuffer["mhz"] = frequency;
-        jsonBuffer["source"] = member_sources[uid];
-        jsonBuffer["utc"] = now();
-        serializeJson(jsonBuffer, out);
-        webSocketServer.broadcastTXT(out);
         return;
       } else {
         String line = ":TheReaper PRIVMSG " + ircNicknames[num] + " :\001ACTION doesn't know that command. (" + text + ")\001\r\n";
@@ -1428,16 +1451,6 @@ void handleSerialString()
     if (username.equals(""))
       username = "serial";
     changeFrequency(username, newFreq);
-    String out;
-    StaticJsonDocument<1024> jsonBuffer;
-    jsonBuffer["username"] = username;
-    jsonBuffer["event"] = "frequency";
-    jsonBuffer["rssi"] = 0;
-    jsonBuffer["mhz"] = frequency;
-    jsonBuffer["source"] = source;
-    jsonBuffer["utc"] = now();
-    serializeJson(jsonBuffer, out);
-    webSocketServer.broadcastTXT(out);
     return;
   }
   if (Serial2Buffer.equals("/advertise") || Serial2Buffer.equals("/ADVERTISE"))
@@ -1656,8 +1669,10 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
         Serial.print("Websocket Connection: ");
         Serial.println(ip);
         StaticJsonDocument<2048> jsonBuffer;
+        jsonBuffer["event"] = "greet";
         jsonBuffer["clientIp"] = ip.toString();
         jsonBuffer["mhz"] = frequency;
+        jsonBuffer["replayChatHistory"] = replayChatHistory;
         JsonArray usersJson = jsonBuffer.createNestedArray("users");
         for(int i = 0; i < MAX_MEMBERS; i++)
         {
@@ -1672,7 +1687,6 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
         String out;
         serializeJson(jsonBuffer, out);
         webSocketServer.sendTXT(num, out);
-        replayHistory(num);
       }
       break;
     case WStype_TEXT:
