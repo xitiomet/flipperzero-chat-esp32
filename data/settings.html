@@ -218,7 +218,9 @@ function produceJSON()
     }
     outObject['wifi'] = wifiObject;
     console.log(JSON.stringify(outObject));    
-    $.post( "settings.json", {"body": JSON.stringify(outObject)});
+    $.post( "settings.json", {"body": JSON.stringify(outObject)}).done(function( data ) {
+        alert("Changes Saved!");
+    });
 }
 
   window.onload = function ()

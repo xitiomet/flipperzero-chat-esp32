@@ -359,6 +359,8 @@ function sendMessage()
           logIt("Restarting Device");
           var mm = {"event":"restart", "username": document.getElementById('nicknameField').value};
           sendEvent(mm);
+      } else if (text.startsWith("/setup") || text.startsWith("/settings")) {
+         var myWindow = window.open('settings.html', "SubGhzChatSettings", "width=455,height=635");
       } else {
           var mm = {"event":"chat", "text": text, "username": document.getElementById('nicknameField').value, "utc": Math.floor(Date.now() / 1000)};
           sendEvent(mm);
