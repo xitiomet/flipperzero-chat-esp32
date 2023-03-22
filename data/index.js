@@ -271,7 +271,7 @@ function setupWebsocket()
                 } else if (event == 'part') {
                     removeUserEntry(jsonObject.username);
                 } else if (event == 'frequency') {
-                    logIt("Frequency changed to " + jsonObject.mhz + " Mhz");
+                    logIt("Frequency changed to " + jsonObject.mhz + " Mhz (by " + jsonObject.username + ")");
                 } else if (event == 'name') {
                     var old_nick = jsonObject.username;
                     var new_nick = jsonObject.to;
@@ -353,8 +353,6 @@ function sendMessage()
       if (text.startsWith("/freq"))
       {
           var mhz = parseFloat(text.substring(5));
-          logIt("Frequency Changed to " + mhz + " Mhz");
-          document.getElementById('freq').innerHTML = mhz + " Mhz";
           var mm = {"event":"frequency", "mhz": mhz, "username": document.getElementById('nicknameField').value};
           sendEvent(mm);
       } else if (text.startsWith("/restart")) {

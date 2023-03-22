@@ -385,7 +385,7 @@ void realPrivateMessage(String &to, String &text, bool isAction, int from_uid)
     {
       if (isAction)
       {
-        String line = ":" + members[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :\001ACTION" + text + "\001\r\n";
+        String line = ":" + members[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :\001ACTION " + text + "\001\r\n";
         ircClients[findIrcId].print(line);
       } else {
         String line = ":" + members[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :" + text + "\r\n";
