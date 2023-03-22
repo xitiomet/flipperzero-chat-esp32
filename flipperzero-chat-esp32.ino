@@ -286,11 +286,10 @@ void changeFrequency(String &username, float frq)
 // Handle JSON payloads from the websocket on port 81
 void processJSONPayload(int num, uint8_t * payload)
 {
-  boolean doRestart = false;
   IPAddress ip = webSocketServer.remoteIP(num);
   String source = "ws_" + ip.toString();
   char* data = (char *) payload;
-  DynamicJsonDocument root(2048);
+  DynamicJsonDocument root(3072);
   DeserializationError error = deserializeJson(root, data);
   if (error)
   {
@@ -314,70 +313,126 @@ void processJSONPayload(int num, uint8_t * payload)
       if (root.containsKey("text") && event.equals("chat"))
       {
         String text = root["text"].as<String>();
-        Serial.print("(");
-        Serial.print(source);
-        Serial.print(") ");
-        Serial.print(username);
-        Serial.print(": ");
-        Serial.println(text);
+        //Serial.print("(");
+        //Serial.print(source);
+        //Serial.print(") ");
+        //Serial.print(username);
+        //Serial.print(": ");
+        //Serial.println(text);
         String xmitData = "\x1B[0;91m" + username + "\x1B[0m: " + text + "\r\n";
         Serial2.print(xmitData);
         streamToRadio(xmitData);
         flashMessage(username, text);
         lobbyPrivmsg(username,text);
+        root["source"] = source;
+        root["num"] = num;
+        if (!root.containsKey("utc") && timeStatus() == timeSet)
+        {
+          root["utc"] = now();
+        }
+        String out;
+        serializeJson(root, out);
+        for(int i = 0; i < webSocketServer.connectedClients(); i++)
+        {
+          if (i != num)
+            webSocketServer.sendTXT(i, out);
+        }
+        saveHistory(out);
       } else {
         if (event.equals("join"))
         {
-          registerUser(num, username, source, WiFi.RSSI());
-          return;
+          uid = registerUser(num, username, source, WiFi.RSSI());
         } else if (event.equals("part")) {
           deleteUser(username);
-          return;
         } if (event.equals("frequency")) {
           changeFrequency(username, root["mhz"].as<float>());
-          return;
         } else if (event.equals("raw")) {
           String data = root["data"].as<String>();
           streamToRadio(data);
-          return;
         } else if (event.equals("restart")) {
-          doRestart = true;
+          ESP.restart();
         } else if (event.equals("radioReset")) {
           flipperChatPreset();
-          return;
         } else if (event.equals("name") && root.containsKey("to")) {
           String to = root["to"].as<String>();
           userChangeName(username, to, true);
-          return;
         } else if (event.equals("advertise")) {
           advertiseGateway();
-          return;
         } else if (event.equals("history")) {
           replayHistory(num);
-          return;
+        } else if (event.equals("private") && root.containsKey("to") && root.containsKey("text")) {
+          bool isAction = false;
+          if (root.containsKey("action"))
+          {
+            isAction = root["action"].as<bool>();
+          }
+          String to = root["to"].as<String>();
+          String text = root["text"].as<String>();
+          realPrivateMessage(to, text, isAction, uid);
         }
       }
-      root["source"] = source;
-      root["num"] = num;
-      if (!root.containsKey("utc") && timeStatus() == timeSet)
-      {
-        root["utc"] = now();
-      }
-      String out;
-      serializeJson(root, out);
-      for(int i = 0; i < webSocketServer.connectedClients(); i++)
-      {
-        if (i != num)
-          webSocketServer.sendTXT(i, out);
-      }
-      if (event.equals("chat"))
-      {
-        saveHistory(out);
-      }
     }
-    if (doRestart)
+  }
+}
+
+void realPrivateMessage(String &to, String &text, bool isAction, int from_uid)
+{
+  if (from_uid >= 0)
+  {
+    int num = member_nums[from_uid];
+    int findIrcId = findIrcNick(to);
+    if (findIrcId >= 0)
     {
-      ESP.restart();
+      if (isAction)
+      {
+        String line = ":" + members[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :\001ACTION" + text + "\001\r\n";
+        ircClients[findIrcId].print(line);
+      } else {
+        String line = ":" + members[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :" + text + "\r\n";
+        ircClients[findIrcId].print(line);
+      }
+    } else {
+      int findUserId = findUser(to);
+      if (findUserId >= 0)
+      {
+        int wsNum = member_nums[findUserId];
+        if (wsNum >= 0)
+        {
+          StaticJsonDocument<3072> jsonBuffer;
+          jsonBuffer["username"] = members[from_uid];
+          jsonBuffer["text"] = text;
+          jsonBuffer["event"] = "private";
+          jsonBuffer["rssi"] = WiFi.RSSI();
+          jsonBuffer["utc"] = now();
+          jsonBuffer["action"] = isAction;
+          jsonBuffer["source"] = member_sources[from_uid];
+          jsonBuffer["to"] = members[findUserId];
+          String out;
+          serializeJson(jsonBuffer, out);
+          //Serial.println(out);
+          webSocketServer.sendTXT(wsNum, out);
+        } else {
+          StaticJsonDocument<1024> jsonBuffer;
+          jsonBuffer["for"] = members[from_uid];
+          jsonBuffer["text"] = "User cannot receive private messages";
+          jsonBuffer["event"] = "error";
+          jsonBuffer["utc"] = now();
+          jsonBuffer["to"] = to;
+          String out;
+          serializeJson(jsonBuffer, out);
+          webSocketServer.sendTXT(num, out);
+        }
+      } else {
+        StaticJsonDocument<1024> jsonBuffer;
+        jsonBuffer["for"] = members[from_uid];
+        jsonBuffer["text"] = "Couldn't find user";
+        jsonBuffer["event"] = "error";
+        jsonBuffer["utc"] = now();
+        jsonBuffer["to"] = to;
+        String out;
+        serializeJson(jsonBuffer, out);
+        webSocketServer.sendTXT(num, out);
+      }
     }
   }
 }
@@ -431,8 +486,8 @@ int registerUser(int wsNum, String &username, String &source, int rssi)
     {
       if (members[i].equals(""))
       {
-        Serial.print(username);
-        Serial.println(" joined the chat");
+        //Serial.print(username);
+        //Serial.println(" joined the chat");
         String bdy = "Joined the chat";
         flashMessage(username, bdy);
         members[i] = username;
@@ -447,7 +502,11 @@ int registerUser(int wsNum, String &username, String &source, int rssi)
         jsonBuffer["rssi"] = rssi;
         jsonBuffer["source"] = source;
         serializeJson(jsonBuffer, out);
-        webSocketServer.broadcastTXT(out);
+        for(int i = 0; i < webSocketServer.connectedClients(); i++)
+        {
+          if (i != wsNum)
+            webSocketServer.sendTXT(i, out);
+        }
         String xmitData = "\x1B[0;92m" + username + " joined chat.\x1B[0m\r\n";
         if (!source.equals("radio") && !source.equals("flipper"))
         {
@@ -507,8 +566,8 @@ void deleteUser(int idx)
 {
   if (!members[idx].equals(""))
   {
-    Serial.print(members[idx]);
-    Serial.println(" left the chat");
+    //Serial.print(members[idx]);
+    //Serial.println(" left the chat");
     String bdy = "Left the chat";
     flashMessage(members[idx], bdy);
     String out;
@@ -662,12 +721,6 @@ void readChatFromRadioBuffer()
   {
     member_last_active[uid] = millis();
   }
-  Serial.print("(");
-  Serial.print(source);
-  Serial.print(") ");
-  Serial.print(username);
-  Serial.print(": ");
-  Serial.println(text);
   String out;
   StaticJsonDocument<3072> jsonBuffer;
   jsonBuffer["username"] = username;
@@ -1331,8 +1384,8 @@ void loopIrc()
         ircNicknames[i] = "";
         ircUserId[i] = -1;
         ircClients[i] = ircServer.available();
-        Serial.print("New IRC client: ");
-        Serial.println(ircClients[i].remoteIP());
+        //Serial.print("New IRC client: ");
+        //Serial.println(ircClients[i].remoteIP());
         break;
       }
     }
@@ -1689,11 +1742,15 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
         webSocketServer.sendTXT(num, out);
       }
       break;
-    case WStype_TEXT:
-      if (payload[0] == '{') {
-        processJSONPayload(num, payload);
+    case WStype_TEXT: {
+        if (lenght > 0)
+        {
+          if (payload[0] == '{') {
+            processJSONPayload(num, payload);
+          }
+        }
+        break;
       }
-      break;
     }
 }
 
