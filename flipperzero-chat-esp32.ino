@@ -108,6 +108,7 @@ long flashMessageAt = 0;
 
 byte radioBuffer[2048] = {0};
 int radioBufferPos = 0;
+long radioBufferTimer = 0;
 int radioRssi = 0;
 
 String Serial2Nickname = "";
@@ -653,6 +654,7 @@ void setup()
 
 void clearRadioBuffer()
 {
+  radioBufferTimer = 0;
   radioBufferPos = 0;
   for(int n = 0; n < 2048; n++)
   {
@@ -663,6 +665,8 @@ void clearRadioBuffer()
 
 void appendToRadioBuffer(byte c)
 {
+  if (radioBufferPos == 0)
+    radioBufferTimer = millis();
   if (radioBufferPos < 2047)
   {
     radioBuffer[radioBufferPos] = c;
@@ -815,12 +819,10 @@ void checkRadio()
       if (radioBufferPos == 0 && c != 27)
       {
         // keep scanning
-        //Serial.print((char) c);
-        //Serial.println(" reset buffer");
       } else if (radioBufferPos == 1 && c != 91) {
         // reset not message start
         radioBufferPos = 0;
-        //Serial.println("reset buffer2");
+        radioBufferTimer = 0;
       } else if ((c >= 32 && c <= 126) || c == 27 || c == 10 || c == 13) {
         appendToRadioBuffer(c);
       }
@@ -859,6 +861,16 @@ void checkRadio()
           deleteUser(realUsername);
         }
       }
+      clearRadioBuffer();
+    }
+  }
+  if (radioBufferTimer > 0)
+  {
+    //if a transmission started 3 seconds ago and never finished, flush the buffer.
+    if ((millis() - radioBufferTimer) > 3000)
+    {
+      //Serial.print("Timer Flushed Buffer @");
+      //Serial.println(radioBufferPos);
       clearRadioBuffer();
     }
   }
