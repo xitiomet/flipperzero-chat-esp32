@@ -255,8 +255,8 @@ void changeFrequency(String &username, float frq)
   {
     frequency = frq;
     ELECHOUSE_cc1101.setMHZ(frequency);
-    broadcastIrc(":TheReaper TOPIC #lobby :" + String(frequency) + " Mhz");
-    broadcastIrc(":TheReaper NOTICE #lobby :The frequency has been changed to " + String(frequency) + " Mhz (by " + username + ")");
+    broadcastIrc(":TheReaper!~TheReaper@void TOPIC #lobby :" + String(frequency) + " Mhz");
+    broadcastIrc(":TheReaper!~TheReaper@void NOTICE #lobby :The frequency has been changed to " + String(frequency) + " Mhz (by " + username + ")");
     String line = "\x1B[0;94mThe frequency has been changed to " + String(frequency) + " Mhz (by " + username + ")\x1B[0m\r\n";
     Serial2.print(line);
     String out;
@@ -386,10 +386,10 @@ void realPrivateMessage(String &to, String &text, bool isAction, int from_uid)
     {
       if (isAction)
       {
-        String line = ":" + members[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :\001ACTION " + text + "\001\r\n";
+        String line = ":" + members[from_uid] + "!~" + members[from_uid] + "@" + member_sources[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :\001ACTION " + text + "\001\r\n";
         ircClients[findIrcId].print(line);
       } else {
-        String line = ":" + members[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :" + text + "\r\n";
+        String line = ":" + members[from_uid] + "!~" + members[from_uid] + "@" + member_sources[from_uid] + " PRIVMSG " + ircNicknames[findIrcId] + " :" + text + "\r\n";
         ircClients[findIrcId].print(line);
       }
     } else {
@@ -585,7 +585,7 @@ void deleteUser(int idx)
       streamToRadio(xmitData);
     }
     Serial2.print(xmitData);
-    String ircPart = ":" + members[idx] + " PART #lobby";
+    String ircPart = ":" + members[idx] + "!~" + members[idx] + "@" + member_sources[idx] + " PART #lobby";
     broadcastIrc(ircPart);
   }
   members[idx] = "";
@@ -1029,11 +1029,11 @@ void handleIrcCommand(int num)
         changeFrequency(ircNicknames[num], newFreq);
         return;
       } else {
-        String line = ":TheReaper PRIVMSG " + ircNicknames[num] + " :\001ACTION doesn't know that command. (" + text + ")\001\r\n";
+        String line = ":TheReaper!~TheReaper@void PRIVMSG " + ircNicknames[num] + " :\001ACTION doesn't know that command. (" + text + ")\001\r\n";
         ircClients[num].print(line);
       }
     } else {
-      String line = ":TheReaper PRIVMSG " + ircNicknames[num] + " :\001ACTION is a bot for #lobby. You must join #lobby to issues commands.\001\r\n";
+      String line = ":TheReaper!~TheReaper@void PRIVMSG " + ircNicknames[num] + " :\001ACTION is a bot for #lobby. You must join #lobby to issues commands.\001\r\n";
       ircClients[num].print(line);
     }
     return;
@@ -1178,7 +1178,9 @@ void handleIrcCommand(int num)
       nickname = nickname.substring(1, nickname.length());
     if (ircNicknames[num].equals(""))
     {
-      ircClients[num].println(line);
+      String rmip = ircClients[num].remoteIP().toString();
+      String source = "irc_" + rmip;
+      ircClients[num].println(":" + nickname + "!~" + ircUsernames[num] + "@" + source + " NICK " + nickname);
     } else {
       userChangeName(ircNicknames[num], nickname, true);
     }
@@ -1215,7 +1217,9 @@ void handleIrcCommand(int num)
       int findIrcId = findIrcNick(arg1);
       if (findIrcId >= 0)
       {
-        String line = ":" + ircNicknames[num] + " PRIVMSG " + ircNicknames[findIrcId] + " :" + arg2 + "\r\n";
+        String rmip = ircClients[num].remoteIP().toString();
+        String source = "irc_" + rmip;
+        String line = ":" + ircNicknames[num] + "!~" + ircNicknames[num] + "@" + source + " PRIVMSG " + ircNicknames[findIrcId] + " :" + arg2 + "\r\n";
         ircClients[findIrcId].print(line);
         return;
       } else {
@@ -1420,13 +1424,14 @@ void loopIrc()
 
 void lobbyPrivmsg(String &username, String &text)
 {
-  String line = ":" + username + " PRIVMSG #lobby :" + text;
+
+  String line = "PRIVMSG #lobby :" + text;
   broadcastIrcExcept(username, line);
 }
 
 void lobbyNotice(String &username, String &text)
 {
-  String line = ":" + username + " NOTICE #lobby :" + text;
+  String line = "NOTICE #lobby :" + text;
   broadcastIrcExcept(username, line);
 }
 
@@ -1435,7 +1440,7 @@ void userChangeName(String &oldnick, String &newnick, bool radio)
   int uid = findUser(oldnick);
   if (uid >= 0)
   {
-    String line = ":" + oldnick + " NICK :" + newnick;
+    String line = ":" + oldnick + "!~" + oldnick + "@" + member_sources[uid] + " NICK :" + newnick;
     broadcastIrc(line);
     members[uid] = newnick;
     int wsNum = member_nums[uid];
@@ -1472,7 +1477,8 @@ void broadcastIrcExcept(String &username, String &line)
   {
     if (ircClients[i] && ircUserId[i] >= 0 && ircUserId[i] != uid)
     {
-      ircClients[i].print(line);
+      String lineStart = ":" + members[uid] + "!~" + members[uid] + "@" + member_sources[uid];
+      ircClients[i].print(lineStart + " " + line);
       ircClients[i].print("\r\n");
     }
   }
