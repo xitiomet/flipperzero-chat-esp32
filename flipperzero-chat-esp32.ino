@@ -1253,12 +1253,14 @@ void handleIrcCommand(int num)
               //Serial.println(out);
               webSocketServer.sendTXT(wsNum, out);
             } else {
-              String line = ":" + members[findUserId] + " PRIVMSG " + ircNicknames[num] + " :\001ACTION is a websocket user. You must join #lobby to send messages to websocket users\001\r\n";
+              String lineStart = ":" + members[findUserId] + "!~" + members[findUserId] + "@" + member_sources[findUserId];
+              String line = lineStart + " PRIVMSG " + ircNicknames[num] + " :\001ACTION is a websocket user. You must join #lobby to send messages to websocket users\001\r\n";
               ircClients[num].print(line);
               return;
             }
           } else {
-            String line = ":" + members[findUserId] + " PRIVMSG " + ircNicknames[num] + " :\001ACTION is not capable of receiving private messages. This is likely because they are connected from a remote radio device.\001\r\n";
+            String lineStart = ":" + members[findUserId] + "!~" + members[findUserId] + "@" + member_sources[findUserId];
+            String line = lineStart + " PRIVMSG " + ircNicknames[num] + " :\001ACTION is not capable of receiving private messages. This is likely because they are connected from a remote radio device.\001\r\n";
             ircClients[num].print(line);
             return;
           }
@@ -1280,7 +1282,9 @@ void handleIrcCommand(int num)
         int findIrcId = findIrcNick(arg1);
         if (findIrcId >= 0)
         {
-          String line = ":" + ircNicknames[num] + " NOTICE " + ircNicknames[findIrcId] + " :" + arg2 + "\r\n";
+          String rmip = ircClients[num].remoteIP().toString();
+          String source = "irc_" + rmip;
+          String line = ":" + ircNicknames[num] + "!" + ircUsernames[num] + "@" + source + " NOTICE " + ircNicknames[findIrcId] + " :" + arg2 + "\r\n";
           ircClients[findIrcId].print(line);
           return;
         }
