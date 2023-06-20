@@ -64,7 +64,7 @@ Assuming you are in this project root directory:
 
 ```shell
 md fatfs
-wget https://github.com/marcmerlin/esp32_fatfsimage/raw/master/fatfsimage -o ./fatfs/fatfsimage
+curl https://raw.githubusercontent.com/marcmerlin/esp32_fatfsimage/master/fatfsimage -o fatfs/fatfsimage
 chmod +x ./fatfs/fatfsimage
 ```
 
