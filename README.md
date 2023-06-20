@@ -10,17 +10,85 @@ In order to build this you will need:
 
  * ESP32 - https://www.amazon.com/gp/product/B09GK74F7N/
  * CC1101 - https://www.amazon.com/gp/product/B01DS1WUEQ/
- * Computer with Arduino 1.8.18
+ * Computer with Arduino 1.8.18 or Arduino IDE > 2.0
      * ESP32 library support 2.0.5 - https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
      * SmartRC-CC1101-Driver-Lib - https://github.com/LSatan/SmartRC-CC1101-Driver-Lib
-     * Ability to upload FatFS image - https://github.com/lorol/arduino-esp32fs-plugin
+     * Ability to upload FatFS image - https://github.com/lorol/arduino-esp32fs-plugin (Arduino 1.8.18)
      * ArduinoJson 6.19.3 - https://arduinojson.org/?utm_source=meta&utm_medium=library.properties
      * Adafruit_SSD1306 2.5.1 - https://github.com/adafruit/Adafruit_SSD1306
      * Time Library 1.6.1 - https://github.com/PaulStoffregen/Time
      * NTPClient 3.2.0 - https://github.com/arduino-libraries/NTPClient
 
 
-### Building your own bridge
+## Arduino IDE > 2.0
+
+### Update /data to FFat filesystem without using add-on
+
+*To understand more about ffat, see https://github.com/marcmerlin/esp32_fatfsimage *
+
+Assuming you will use the default project Partition Scheme
+Selected partition scheme:
+  - NoOTA - 2Mb/2Mb ffat
+
+Partition table:
+
+| Name        | Type    | SubType     | Offset      |  Size       | Flags |
+|-------------|---------|-------------|-------------|-------------|-------|
+|nvs          |data     |nvs          |0x9000       |0x5000       |       |
+|otadata      |data     |ota          |0xe000       |0x2000       |       |
+|app0         |app      |ota_0        |0x10000      |0x200000     |       |
+|**ffat**     |**data** |**fat**      |**0x210000** |**0x1E0000** |       |
+|coredump     |data     |coredump     |0x3F0000     |0x10000      |       |
+
+
+You will need to download fatfsimage file -> https://github.com/marcmerlin/esp32_fatfsimage/raw/master/fatfsimage .
+
+
+ffat partition Offset = 0x1E0000 = 1966080  **Aproximately 2Mb**
+1966080/1024 = **1920** bytes
+
+
+### If you are using Linux
+
+Create img.ffat with all contents of /data directory, **don't forget to create a settings.json and put the file into the /data directory first** :
+
+```shell
+wget https://github.com/marcmerlin/esp32_fatfsimage/raw/master/fatfsimage -o ./fatfs/fatfsimage
+fatfsimage -l5 img.ffat 1920 data/
+```
+
+
+### If you are using MacOS or Windows
+
+Assuming you are in this project root directory:
+
+```shell
+md fatfs
+wget https://github.com/marcmerlin/esp32_fatfsimage/raw/master/fatfsimage -o ./fatfs/fatfsimage
+chmod +x ./fatfs/fatfsimage
+```
+
+As fatfsimage is an elf/linux file, so you can use a docker container to just execute the command and create the file:
+
+```shell
+docker run --rm -it -v $PWD/data:/app/data -v $PWD/fatfs:/app/fatfs  ubuntu:18.04 ./app/fatfs/fatfsimage -l5 /app/fatfs/img.ffat 1920 /app/data/
+```
+
+### Write img.ffat to your ESP32
+
+```shell
+esptool.py --chip esp32 --port <serial> --baud <baudrate> write_flash  <ffat_offset> <file>
+```
+
+Example:
+
+```shell
+esptool.py --chip esp32 --port /dev/cu.usbserial-567E0362511 --baud 921600 write_flash  0x210000 fatfs/img.ffat
+```
+
+
+
+## Building your own bridge
 
  ESP-32 | CC1101
  -------|------------
@@ -87,7 +155,7 @@ Flash Settings for ESP32 (in aruino ide)
 
 Now you are all set to flash the sketch and upload the FatFS image.
 
-### Using the web interface
+## Using the web interface
 
 Navigate a web browser to the ESP32's ip (output on the serial console) and you will be prompted to enter a nickname. Multiple users and computers are able to connect to the same ESP32 with distinct nicknames, they will see each others messages, as well as flipper users.
 
@@ -101,7 +169,7 @@ At any point while in the chat screen a connected user may type "/freq 433.92" t
 
 If the gateway starts malfunctioning any web user can type "/restart" to reboot it remotely.
 
-### Connecting with an IRC Client
+## Connecting with an IRC Client
 
 So I decided to add support for IRC clients. Letting users bring their favorite chat interface to this project.
 
@@ -121,7 +189,7 @@ Things that don't work since this isn't a real IRC server:
  * kicks/bans/ignores
  * creating rooms
 
- ### Serial2 Interface
+ ## Serial2 Interface
 
  I decided i wanted a simple way to walk around NYC with this device and my phone and not worry about tethering.
  It seemed worth adding one more inteface for simplicity using TX2 and RX2. This allows the device to be hooked up to
@@ -138,7 +206,7 @@ Things that don't work since this isn't a real IRC server:
  * /status - get a full status report on the device, including connected users
  * /restart - restart the device
 
-### Websocket protocol
+## Websocket protocol
 
 If you would like to make your own client to interface with this device the protocol is pretty simple. port 81 is a websocket server all messages are single line json objects.
 
@@ -178,7 +246,7 @@ To change the frequency
 {"event":"frequency", "mhz": 315, "username": "Hacker5091"}
 ```
 
-### How do flipper chat messages work?
+## How do flipper chat messages work?
 
 Thought i would add some details on my reverse engineering of the flipper chat protocol. After getting the radio stuff tuned just right you have a packet radio!
 
