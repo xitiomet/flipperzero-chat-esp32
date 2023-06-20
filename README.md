@@ -83,7 +83,7 @@ esptool.py --chip esp32 --port <serial> --baud <baudrate> write_flash  <ffat_off
 Example:
 
 ```shell
-esptool.py --chip esp32 --port /dev/cu.usbserial-567E0362511 --baud 921600 write_flash  0x210000 fatfs/img.ffat
+esptool.py --chip esp32 --port /dev/cu.usbserial-567E0362511 --baud 115200 write_flash  0x210000 fatfs/img.ffat
 ```
 
 
