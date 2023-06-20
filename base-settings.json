@@ -6,6 +6,7 @@
     "apSSID": "FlipperChat",
     "apPassword": "changeme",
     "replayChatHistory": true,
+    "SerialBaud": 115200,
     "Serial2Baud": 115200,
     "wifi": [
         {

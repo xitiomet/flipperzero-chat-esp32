@@ -8,14 +8,14 @@
  *
  * Hookup between devices:
  *
- *  ESP-32   to   CC1101
- *  ------   --   ------
- *  3.3v     to   VIN
- *  GND      to   GND
- *  5        to   CS
- *  18       to   SCLK
- *  19       to   MISO / SO
- *  23       to   MOSI / SI
+ *  ESP-32 ESP32-WROOM  to   CC1101
+ *  ------ -----------  --   ------
+ *  3.3v          3.3v  to   VIN
+ *  GND            GND  to   GND
+ *  5          GPIO-26  to   CS
+ *  18         GPIO-25  to   SCLK
+ *  19         GPIO-32  to   MISO / SO
+ *  23         GPIO-33  to   MOSI / SI
  */
 
 #define ARDUINOJSON_USE_LONG_LONG 1
@@ -42,6 +42,7 @@
 #define SCREEN_ADDRESS 0x3c ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+
 #define PIX_ROW_1 0
 #define PIX_ROW_1p5 14
 #define PIX_ROW_2 24
@@ -53,6 +54,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define HISTORY_SIZE 15
 #define SS_PIN    5
 float frequency = 433.92;
+
+
+
 
 WiFiMulti wifiMulti;
 WiFiServer ircServer(6667);
@@ -619,16 +623,19 @@ void setup()
     ircGreeted[i] = false;
   }
   clearRadioBuffer();
-  Serial.begin(115200);
-  Serial.println("INIT");
+  
+  FFat.begin();
+  loadSettings();
+  
+  Serial.println("INIT RADIO");
+  
   if (ELECHOUSE_cc1101.getCC1101())
   {
     Serial.println("CC1101 Connection OK");
   } else {
     Serial.println("CC1101 Connection Error");
   }
-  FFat.begin();
-  loadSettings();
+
   webSocketServer.begin();
   webSocketServer.onEvent(webSocketServerEvent);
   httpServer.on("/", handleRoot);
@@ -1809,6 +1816,7 @@ void tryMDNS()
 // Load Settings from flash
 void loadSettings()
 {
+  
   StaticJsonDocument<4096> settings;
   File file = FFat.open("/settings.json", "r");
   if (!file)
@@ -1823,6 +1831,27 @@ void loadSettings()
     {
       frequency = settings["startFrequency"].as<float>();
     }
+
+    if (settings.containsKey("SerialBaud"))
+    {
+      unsigned long serialBaudrate = settings["SerialBaud"].as<unsigned long>();
+      Serial.begin(serialBaudrate);
+    }
+
+    if (settings.containsKey("CC1101"))  
+    {
+
+        Serial.println("Configuring CC1101 pinout.");
+        JsonObject cc1101 = settings["CC1101"].as<JsonObject>();
+        byte sck = cc1101["SCK_GPIO"].as<byte>();
+        byte csn = cc1101["CSN_GPIO"].as<byte>();
+        byte miso = cc1101["MISO_GPIO"].as<byte>();
+        byte mosi = cc1101["MOSI_GPIO"].as<byte>();
+
+        ELECHOUSE_cc1101.setSpiPin(sck, miso, mosi, csn);
+    }
+
+    
     ELECHOUSE_cc1101.Init();
     flipperChatPreset();
     if (settings.containsKey("apMode") && settings.containsKey("apSSID"))
