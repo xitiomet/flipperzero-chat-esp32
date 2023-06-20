@@ -31,6 +31,34 @@ In order to build this you will need:
  19     | MISO / SO
  23     | MOSI / SI
 
+
+ ESP-32 WROOM | CC1101
+ -------------|------------
+ 3.3v         | VIN
+ GND          | GND
+ GPIO-26      | CS
+ GPIO-25      | SCLK
+ GPIO-32      | MISO / SO
+ GPIO-33      | MOSI / SI
+
+If you are using ESP-32 WROOM, you can use the pinout like the table above and at the json file,
+set the *SerialBaud* to 9600 and add this:
+
+```json
+/*Set SerialBaud to 96700*/
+...
+"SerialBaud":9600, 
+...
+/*Custom CC1101 Pinout*/
+"CC1101":
+{
+  "SCK_GPIO": 25,
+  "CSN_GPIO": 26,
+  "MISO_GPIO": 32,
+  "MOSI_GPIO": 33        
+}
+```
+
 Please note: The GDO0 and GDO2 pins are left unconnected.
 
 Optionally you can add a screen using an SSD1306 OLED module.
